@@ -1,0 +1,7 @@
+{
+  "name": "FarmaPOS",
+  "description": "Sistema de gestión e inventario farmacéutico desarrollado por SoftPlus para Farma.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
