@@ -3,7 +3,8 @@ import {
   BarChart3, Download, FileSpreadsheet, PieChart, TrendingUp, 
   Users, Calendar, ShoppingBag, User, ChevronRight, X, Pill, 
   Clock, CreditCard, Search, ShieldCheck, Printer, Lock, 
-  Lightbulb, Store, DollarSign, QrCode, Filter, Receipt, CheckCircle2 
+  Lightbulb, Store, DollarSign, QrCode, Filter, Receipt, CheckCircle2,
+  Ban, RotateCcw, AlertTriangle, AlertCircle
 } from 'lucide-react';
 import { SaleRecord, PharmacyInfo, User as UserType } from '@/types';
 import { DEFAULT_PHARMACY_INFO } from '@/constants';
@@ -15,6 +16,7 @@ interface ReportsProps {
   currentUserRole?: string;
   pharmacyInfo?: PharmacyInfo;
   staff?: UserType[];
+  onVoidSale?: (saleId: string, reason: string) => { success: boolean; message: string };
 }
 
 const Reports: React.FC<ReportsProps> = ({ 
@@ -22,13 +24,18 @@ const Reports: React.FC<ReportsProps> = ({
   currencySymbol, 
   currentUserRole = 'ADMIN',
   pharmacyInfo = DEFAULT_PHARMACY_INFO,
-  staff = []
+  staff = [],
+  onVoidSale
 }) => {
   const [filterPatient, setFilterPatient] = useState('');
   const [selectedRegister, setSelectedRegister] = useState<'ALL' | 'Caja 1' | 'Caja 2'>('ALL');
   const [selectedCashier, setSelectedCashier] = useState<string>('ALL');
   const [selectedPayment, setSelectedPayment] = useState<string>('ALL');
+  const [selectedStatus, setSelectedStatus] = useState<'ALL' | 'ACTIVE' | 'ANULADA'>('ALL');
   const [selectedSale, setSelectedSale] = useState<SaleRecord | null>(null);
+  const [voidModalSale, setVoidModalSale] = useState<SaleRecord | null>(null);
+  const [voidReason, setVoidReason] = useState('Error de digitación / Solicitud del cliente');
+  const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   if (currentUserRole !== 'ADMIN') {
     return (
@@ -70,7 +77,12 @@ const Reports: React.FC<ReportsProps> = ({
   }
 
   // Multi-criteria filtering: Register, Cashier, Payment, Search
+  // Multi-criteria filtering: Register, Cashier, Payment, Status, Search
   const filteredSales = sales.filter(sale => {
+    // Filter by Status
+    if (selectedStatus === 'ACTIVE' && sale.status === 'ANULADA') return false;
+    if (selectedStatus === 'ANULADA' && sale.status !== 'ANULADA') return false;
+
     // Filter by Register
     const saleRegister = sale.cashRegister || 'Caja 1';
     if (selectedRegister !== 'ALL' && saleRegister !== selectedRegister) {
@@ -100,24 +112,27 @@ const Reports: React.FC<ReportsProps> = ({
     );
   });
 
-  // Calculate totals
-  const totalRevenue = filteredSales.reduce((sum, s) => sum + s.total, 0);
+  // Calculate totals (Net Revenue only sums valid, non-voided sales)
+  const activeFilteredSales = filteredSales.filter(s => s.status !== 'ANULADA');
+  const voidedFilteredSales = filteredSales.filter(s => s.status === 'ANULADA');
+  const totalRevenue = activeFilteredSales.reduce((sum, s) => sum + s.total, 0);
+  const totalVoidedRevenue = voidedFilteredSales.reduce((sum, s) => sum + s.total, 0);
 
-  // Caja 1 Metrics
-  const caja1Sales = sales.filter(s => (s.cashRegister || 'Caja 1') === 'Caja 1');
+  // Caja 1 Metrics (Active only)
+  const caja1Sales = sales.filter(s => (s.cashRegister || 'Caja 1') === 'Caja 1' && s.status !== 'ANULADA');
   const caja1Total = caja1Sales.reduce((sum, s) => sum + s.total, 0);
   const caja1Cash = caja1Sales.filter(s => s.paymentMethod === 'CASH').reduce((sum, s) => sum + s.total, 0);
   const caja1QR = caja1Sales.filter(s => s.paymentMethod === 'QR').reduce((sum, s) => sum + s.total, 0);
   const caja1Card = caja1Sales.filter(s => s.paymentMethod === 'CARD').reduce((sum, s) => sum + s.total, 0);
-  const caja1Cashiers = Array.from(new Set(caja1Sales.map(s => s.cashierName || s.userId).filter(Boolean)));
+  const caja1Cashiers = Array.from(new Set(sales.filter(s => (s.cashRegister || 'Caja 1') === 'Caja 1').map(s => s.cashierName || s.userId).filter(Boolean)));
 
-  // Caja 2 Metrics
-  const caja2Sales = sales.filter(s => s.cashRegister === 'Caja 2');
+  // Caja 2 Metrics (Active only)
+  const caja2Sales = sales.filter(s => s.cashRegister === 'Caja 2' && s.status !== 'ANULADA');
   const caja2Total = caja2Sales.reduce((sum, s) => sum + s.total, 0);
   const caja2Cash = caja2Sales.filter(s => s.paymentMethod === 'CASH').reduce((sum, s) => sum + s.total, 0);
   const caja2QR = caja2Sales.filter(s => s.paymentMethod === 'QR').reduce((sum, s) => sum + s.total, 0);
   const caja2Card = caja2Sales.filter(s => s.paymentMethod === 'CARD').reduce((sum, s) => sum + s.total, 0);
-  const caja2Cashiers = Array.from(new Set(caja2Sales.map(s => s.cashierName || s.userId).filter(Boolean)));
+  const caja2Cashiers = Array.from(new Set(sales.filter(s => s.cashRegister === 'Caja 2').map(s => s.cashierName || s.userId).filter(Boolean)));
 
   // Unique Cashiers for filter
   const allCashiers = Array.from(new Set(sales.map(s => s.cashierName || s.userId).filter(Boolean)));
@@ -125,6 +140,26 @@ const Reports: React.FC<ReportsProps> = ({
   const handleExportAllToExcel = () => {
     const filterTag = selectedRegister === 'ALL' ? 'General_Caja1_y_Caja2' : selectedRegister.replace(/\s+/g, '_');
     exportInvoicesDetailedToExcel(filteredSales, pharmacyInfo, filterTag);
+  };
+
+  const handleConfirmVoid = () => {
+    if (!voidModalSale || !onVoidSale) return;
+    const res = onVoidSale(voidModalSale.id, voidReason);
+    if (res.success) {
+      setFeedbackMsg({ type: 'success', text: res.message });
+      setVoidModalSale(null);
+      // update selectedSale if open
+      if (selectedSale?.id === voidModalSale.id) {
+        setSelectedSale({
+          ...selectedSale,
+          status: 'ANULADA',
+          cancelledAt: new Date().toISOString(),
+          cancellationReason: voidReason
+        });
+      }
+    } else {
+      setFeedbackMsg({ type: 'error', text: res.message });
+    }
   };
 
   return (
@@ -276,28 +311,68 @@ const Reports: React.FC<ReportsProps> = ({
               </p>
             </div>
 
-            {/* Register Toggle Pills */}
-            <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
-              <button
-                onClick={() => setSelectedRegister('ALL')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${selectedRegister === 'ALL' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:text-slate-900'}`}
-              >
-                Todas las Cajas ({sales.length})
-              </button>
-              <button
-                onClick={() => setSelectedRegister('Caja 1')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${selectedRegister === 'Caja 1' ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:text-slate-900'}`}
-              >
-                Caja 1 ({caja1Sales.length})
-              </button>
-              <button
-                onClick={() => setSelectedRegister('Caja 2')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${selectedRegister === 'Caja 2' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:text-slate-900'}`}
-              >
-                Caja 2 ({caja2Sales.length})
-              </button>
+            {/* Register and Status Toggle Pills */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
+                <button
+                  onClick={() => setSelectedRegister('ALL')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${selectedRegister === 'ALL' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:text-slate-900'}`}
+                >
+                  Todas las Cajas ({sales.length})
+                </button>
+                <button
+                  onClick={() => setSelectedRegister('Caja 1')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${selectedRegister === 'Caja 1' ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:text-slate-900'}`}
+                >
+                  Caja 1 ({caja1Sales.length})
+                </button>
+                <button
+                  onClick={() => setSelectedRegister('Caja 2')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${selectedRegister === 'Caja 2' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:text-slate-900'}`}
+                >
+                  Caja 2 ({caja2Sales.length})
+                </button>
+              </div>
+
+              {/* Status Filter */}
+              <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
+                <button
+                  onClick={() => setSelectedStatus('ALL')}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-black transition-all ${selectedStatus === 'ALL' ? 'bg-slate-800 text-white' : 'text-slate-600 hover:text-slate-900'}`}
+                >
+                  Todas
+                </button>
+                <button
+                  onClick={() => setSelectedStatus('ACTIVE')}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-black transition-all ${selectedStatus === 'ACTIVE' ? 'bg-emerald-600 text-white' : 'text-emerald-700 hover:bg-emerald-50'}`}
+                >
+                  Válidas ({sales.filter(s => s.status !== 'ANULADA').length})
+                </button>
+                <button
+                  onClick={() => setSelectedStatus('ANULADA')}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-black transition-all ${selectedStatus === 'ANULADA' ? 'bg-rose-600 text-white' : 'text-rose-600 hover:bg-rose-50'}`}
+                >
+                  Anuladas ({sales.filter(s => s.status === 'ANULADA').length})
+                </button>
+              </div>
             </div>
           </div>
+
+          {feedbackMsg && (
+            <div className={`p-3.5 rounded-2xl flex items-center justify-between text-xs font-bold animate-in slide-in-from-top-2 duration-200 ${
+              feedbackMsg.type === 'success' 
+                ? 'bg-emerald-50 text-emerald-900 border border-emerald-300' 
+                : 'bg-rose-50 text-rose-900 border border-rose-300'
+            }`}>
+              <div className="flex items-center gap-2">
+                {feedbackMsg.type === 'success' ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <AlertCircle className="w-4 h-4 text-rose-600" />}
+                <span>{feedbackMsg.text}</span>
+              </div>
+              <button onClick={() => setFeedbackMsg(null)} className="text-slate-400 hover:text-slate-700">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {/* Search Input */}
@@ -346,25 +421,26 @@ const Reports: React.FC<ReportsProps> = ({
 
         {/* Table */}
         <div className="overflow-x-auto no-scrollbar">
-          <table className="w-full text-left min-w-[750px]">
+          <table className="w-full text-left min-w-[850px]">
             <thead className="bg-slate-100 text-[9px] font-black text-slate-500 uppercase tracking-widest">
               <tr>
-                <th className="px-5 py-3.5">N° Factura</th>
-                <th className="px-5 py-3.5">Fecha y Hora</th>
-                <th className="px-5 py-3.5">Caja</th>
-                <th className="px-5 py-3.5">Cajero / Usuario</th>
-                <th className="px-5 py-3.5">Cliente / Paciente</th>
-                <th className="px-5 py-3.5">NIT / CI</th>
-                <th className="px-5 py-3.5">Comprobante</th>
-                <th className="px-5 py-3.5">Pago</th>
-                <th className="px-5 py-3.5 text-right">Total Factura</th>
-                <th className="px-5 py-3.5 text-center">Acciones</th>
+                <th className="px-4 py-3.5">N° Factura</th>
+                <th className="px-4 py-3.5">Fecha y Hora</th>
+                <th className="px-4 py-3.5">Estado</th>
+                <th className="px-4 py-3.5">Caja</th>
+                <th className="px-4 py-3.5">Cajero / Usuario</th>
+                <th className="px-4 py-3.5">Cliente / Paciente</th>
+                <th className="px-4 py-3.5">NIT / CI</th>
+                <th className="px-4 py-3.5">Comprobante</th>
+                <th className="px-4 py-3.5">Pago</th>
+                <th className="px-4 py-3.5 text-right">Total Factura</th>
+                <th className="px-4 py-3.5 text-center">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredSales.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-8 py-16 text-center text-slate-400 italic font-bold">
+                  <td colSpan={11} className="px-8 py-16 text-center text-slate-400 italic font-bold">
                     No se encontraron registros de ventas con los filtros seleccionados.
                   </td>
                 </tr>
@@ -372,42 +448,56 @@ const Reports: React.FC<ReportsProps> = ({
                 filteredSales.map(sale => {
                   const caja = sale.cashRegister || 'Caja 1';
                   const isCaja1 = caja === 'Caja 1';
+                  const isVoided = sale.status === 'ANULADA';
 
                   return (
                     <tr 
                       key={sale.id} 
                       onClick={() => setSelectedSale(sale)}
-                      className="hover:bg-slate-50 transition-colors cursor-pointer group text-xs font-medium text-slate-700"
+                      className={`hover:bg-slate-50 transition-colors cursor-pointer group text-xs font-medium ${
+                        isVoided ? 'bg-rose-50/40 text-slate-500' : 'text-slate-700'
+                      }`}
                     >
-                      <td className="px-5 py-3.5 font-mono text-[11px] font-bold text-slate-900">
+                      <td className="px-4 py-3.5 font-mono text-[11px] font-bold text-slate-900">
                         {sale.id.replace(/\D/g, '').substring(0, 7) || sale.id}
                       </td>
-                      <td className="px-5 py-3.5 text-xs text-slate-600">
+                      <td className="px-4 py-3.5 text-xs text-slate-600">
                         <div className="flex flex-col">
                           <span className="font-bold">{new Date(sale.timestamp).toLocaleDateString('es-BO')}</span>
                           <span className="text-[10px] text-slate-400">{new Date(sale.timestamp).toLocaleTimeString('es-BO')}</span>
                         </div>
                       </td>
-                      <td className="px-5 py-3.5">
+                      <td className="px-4 py-3.5">
+                        {isVoided ? (
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-rose-100 text-rose-700 border border-rose-300">
+                            ANULADA
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            VÁLIDA
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3.5">
                         <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider ${isCaja1 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}`}>
                           {caja}
                         </span>
                       </td>
-                      <td className="px-5 py-3.5 font-bold text-slate-800">
+                      <td className="px-4 py-3.5 font-bold text-slate-800">
                         {sale.cashierName || sale.userId}
                       </td>
-                      <td className="px-5 py-3.5 font-black text-slate-800">
+                      <td className="px-4 py-3.5 font-black text-slate-800">
                         {sale.customerName}
                       </td>
-                      <td className="px-5 py-3.5 font-mono text-[11px] text-slate-500">
+                      <td className="px-4 py-3.5 font-mono text-[11px] text-slate-500">
                         {sale.clientNit || '0'}
                       </td>
-                      <td className="px-5 py-3.5">
+                      <td className="px-4 py-3.5">
                         <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider ${sale.documentType === 'RECIBO' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700'}`}>
                           {sale.documentType === 'RECIBO' ? 'Recibo' : 'Factura'}
                         </span>
                       </td>
-                      <td className="px-5 py-3.5">
+                      <td className="px-4 py-3.5">
                         <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider ${
                           sale.paymentMethod === 'QR' ? 'bg-emerald-100 text-emerald-800' : 
                           sale.paymentMethod === 'CARD' ? 'bg-purple-100 text-purple-800' : 
@@ -416,10 +506,14 @@ const Reports: React.FC<ReportsProps> = ({
                           {sale.paymentMethod}
                         </span>
                       </td>
-                      <td className="px-5 py-3.5 text-right font-black text-emerald-700 text-sm">
-                        {currencySymbol}{sale.total.toFixed(2)}
+                      <td className="px-4 py-3.5 text-right font-black text-sm">
+                        {isVoided ? (
+                          <span className="line-through text-slate-400">{currencySymbol}{sale.total.toFixed(2)}</span>
+                        ) : (
+                          <span className="text-emerald-700">{currencySymbol}{sale.total.toFixed(2)}</span>
+                        )}
                       </td>
-                      <td className="px-5 py-3.5 text-center">
+                      <td className="px-4 py-3.5 text-center">
                         <div className="flex items-center justify-center gap-1">
                           <button
                             onClick={(e) => {
@@ -441,6 +535,21 @@ const Reports: React.FC<ReportsProps> = ({
                           >
                             <FileSpreadsheet className="w-3.5 h-3.5" />
                           </button>
+
+                          {/* Void Invoice Button */}
+                          {!isVoided && onVoidSale && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setVoidModalSale(sale);
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                              title="Anular Factura y Devolver Stock al Inventario"
+                            >
+                              <Ban className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+
                           <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-500 transition-colors" />
                         </div>
                       </td>
@@ -453,18 +562,24 @@ const Reports: React.FC<ReportsProps> = ({
         </div>
       </div>
 
-      {/* Sale Detail Modal with 5x8 Printing and Excel Download */}
+      {/* Sale Detail Modal with 5x8 Printing, Excel Download, and Void Button */}
       {selectedSale && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
-            <div className="p-5 md:p-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
+            <div className={`p-5 md:p-6 text-white flex justify-between items-center shrink-0 ${
+              selectedSale.status === 'ANULADA' ? 'bg-rose-950' : 'bg-slate-900'
+            }`}>
               <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-emerald-500 rounded-xl">
+                <div className={`p-2.5 rounded-xl ${
+                  selectedSale.status === 'ANULADA' ? 'bg-rose-600' : 'bg-emerald-500'
+                }`}>
                   <ShoppingBag className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-lg md:text-xl font-black">Detalle de Comprobante de Venta</h2>
-                  <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">
+                  <h2 className="text-lg md:text-xl font-black">
+                    {selectedSale.status === 'ANULADA' ? 'Comprobante ANULADO' : 'Detalle de Comprobante de Venta'}
+                  </h2>
+                  <p className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">
                     {selectedSale.documentType === 'RECIBO' ? 'Recibo' : 'Factura'} • {selectedSale.cashRegister || 'Caja 1'} • ID: {selectedSale.id}
                   </p>
                 </div>
@@ -475,8 +590,38 @@ const Reports: React.FC<ReportsProps> = ({
             </div>
             
             <div className="p-5 md:p-7 overflow-y-auto flex-1 no-scrollbar space-y-6">
+              
+              {/* If voided, prominent alert banner */}
+              {selectedSale.status === 'ANULADA' && (
+                <div className="p-4 bg-rose-50 border-2 border-rose-300 rounded-2xl flex items-center justify-between animate-in fade-in">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-rose-600 text-white rounded-xl">
+                      <Ban className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-rose-950 uppercase">FACTURA ANULADA - SIN VALOR FISCAL</h4>
+                      <p className="text-[11px] text-rose-800 font-bold">
+                        Motivo: "{selectedSale.cancellationReason || 'Anulada'}"
+                      </p>
+                      <p className="text-[10px] text-rose-600">
+                        Anulada el: {new Date(selectedSale.cancelledAt || Date.now()).toLocaleString('es-BO')} por {selectedSale.cancelledBy || 'Administrador'}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-black bg-rose-200 text-rose-900 px-2.5 py-1 rounded-xl">
+                    Stock Reintegrado
+                  </span>
+                </div>
+              )}
+
               {/* Top metadata grid */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100 text-xs">
+                <div>
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Estado</p>
+                  <p className={`font-black ${selectedSale.status === 'ANULADA' ? 'text-rose-600' : 'text-emerald-700'}`}>
+                    {selectedSale.status === 'ANULADA' ? 'ANULADA' : 'VÁLIDA'}
+                  </p>
+                </div>
                 <div>
                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Caja Asignada</p>
                   <p className="font-black text-emerald-700">{selectedSale.cashRegister || 'Caja 1'}</p>
@@ -530,24 +675,40 @@ const Reports: React.FC<ReportsProps> = ({
               <div className="pt-4 border-t border-slate-100 flex justify-between items-end">
                 <div>
                   <p className="text-xs font-bold text-slate-400">Total Liquidado</p>
-                  <p className="text-[11px] text-slate-500 font-medium">Comprobante emitido satisfactoriamente</p>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    {selectedSale.status === 'ANULADA' ? 'Comprobante ANULADO - Stock restaurado' : 'Comprobante emitido satisfactoriamente'}
+                  </p>
                 </div>
                 <div className="text-right">
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total</p>
-                  <p className="text-2xl font-black text-emerald-600">{currencySymbol}{selectedSale.total.toFixed(2)}</p>
+                  <p className={`text-2xl font-black ${selectedSale.status === 'ANULADA' ? 'line-through text-slate-400' : 'text-emerald-600'}`}>
+                    {currencySymbol}{selectedSale.total.toFixed(2)}
+                  </p>
                 </div>
               </div>
             </div>
             
-            {/* Modal Action Footer with Requested Print & Export Features */}
+            {/* Modal Action Footer with Requested Print & Export Features & Void Button */}
             <div className="p-4 md:p-6 bg-slate-50 border-t border-slate-100 flex flex-wrap gap-2.5 shrink-0">
+              {/* Void Button inside modal */}
+              {selectedSale.status !== 'ANULADA' && onVoidSale && (
+                <button
+                  type="button"
+                  onClick={() => setVoidModalSale(selectedSale)}
+                  className="py-3 px-4 bg-rose-50 hover:bg-rose-100 border border-rose-300 text-rose-700 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95"
+                >
+                  <Ban className="w-4 h-4 text-rose-600" />
+                  <span>Anular Factura</span>
+                </button>
+              )}
+
               {/* 5x8 Printing Button */}
               <button 
                 onClick={() => generate5x8Invoice(selectedSale, currencySymbol, pharmacyInfo)}
                 className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 transition-all"
               >
                 <Printer className="w-4 h-4" />
-                <span>Imprimir Factura 5x8 (Media Carta)</span>
+                <span>Imprimir 5x8</span>
               </button>
 
               {/* Single Excel Invoice Button */}
@@ -556,7 +717,7 @@ const Reports: React.FC<ReportsProps> = ({
                 className="py-3 px-4 bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all"
               >
                 <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                <span>Excel (.xlsx)</span>
+                <span>Excel</span>
               </button>
 
               {/* 80mm Ticket Print */}
@@ -579,6 +740,76 @@ const Reports: React.FC<ReportsProps> = ({
           </div>
         </div>
       )}
+
+      {/* Confirmation Modal to Void Sale */}
+      {voidModalSale && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-200">
+            <div className="p-5 bg-rose-600 text-white flex justify-between items-center">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-white/20 rounded-xl">
+                  <Ban className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black">¿Anular esta Factura / Venta?</h3>
+                  <p className="text-[11px] text-rose-100 font-bold">Comprobante ID: {voidModalSale.id}</p>
+                </div>
+              </div>
+              <button onClick={() => setVoidModalSale(null)} className="text-white/80 hover:text-white p-1">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="bg-rose-50 border border-rose-200 p-3.5 rounded-2xl text-xs text-rose-900 space-y-1">
+                <p className="font-black flex items-center gap-1.5 text-rose-950">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  Efecto inmediato en inventario y caja:
+                </p>
+                <p className="text-slate-700">
+                  1. Todos los medicamentos ({voidModalSale.items.length} productos) serán <strong>restituidos al inventario</strong> automáticamente.
+                </p>
+                <p className="text-slate-700">
+                  2. El monto de <strong>{currencySymbol}{voidModalSale.total.toFixed(2)}</strong> se deducirá de los ingresos netos.
+                </p>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-black text-slate-700 uppercase tracking-wider block mb-1">
+                  Motivo de la Anulación *
+                </label>
+                <input
+                  type="text"
+                  value={voidReason}
+                  onChange={(e) => setVoidReason(e.target.value)}
+                  placeholder="Ej: Devolución de cliente, error en precio, cambio de medicamento..."
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-rose-500"
+                  required
+                />
+              </div>
+
+              <div className="pt-2 flex gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setVoidModalSale(null)}
+                  className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-2xl transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmVoid}
+                  className="flex-[2] py-3 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black rounded-2xl shadow-lg shadow-rose-600/25 transition-all flex items-center justify-center gap-2 active:scale-95"
+                >
+                  <Ban className="w-4 h-4" />
+                  <span>Confirmar Anulación</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

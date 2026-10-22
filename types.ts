@@ -91,6 +91,13 @@ export interface InsurancePlan {
   coveragePercent: number;
 }
 
+export interface BranchStockItem {
+  boxes: number;
+  units: number;
+}
+
+export type BranchStockMap = Record<string, BranchStockItem>;
+
 export interface Medication {
   id: string;
   name: string; // Nombre Comercial
@@ -109,6 +116,7 @@ export interface Medication {
   imageUrl: string;
   stockBoxes: number;
   stockUnits: number;
+  branchStock?: BranchStockMap; // Stock diferenciado por sucursales (ej: Sucursal Central, Sucursal 2)
   isControlled: boolean;
   minStock: number;
   maxStock?: number;
@@ -161,6 +169,7 @@ export interface PrescriptionAnalysis {
 
 export type PaymentMethod = 'CASH' | 'QR' | 'CARD';
 export type DocumentType = 'FACTURA' | 'RECIBO';
+export type SaleStatus = 'COMPLETED' | 'ANULADA';
 
 export interface SaleRecord {
   id: string;
@@ -178,6 +187,25 @@ export interface SaleRecord {
   cashierName?: string;
   cashRegister?: 'Caja 1' | 'Caja 2';
   paymentMethod: PaymentMethod;
+  status?: SaleStatus; // 'COMPLETED' o 'ANULADA'
+  cancelledAt?: string;
+  cancellationReason?: string;
+  cancelledBy?: string;
+}
+
+export interface StockTransfer {
+  id: string;
+  timestamp: string;
+  medicationId: string;
+  medicationName: string;
+  fromBranch: string;
+  toBranch: string;
+  quantityUnits: number;
+  quantityBoxes: number;
+  isBoxTransfer: boolean;
+  lotNumber?: string;
+  responsibleUser: string;
+  notes?: string;
 }
 
 export interface Currency {

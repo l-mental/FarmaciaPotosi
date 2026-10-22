@@ -69,3 +69,9 @@ export const MOCK_SUPPLIERS: Supplier[] = [];
 export const MOCK_SALES: SaleRecord[] = [];
 
 export const MOCK_PURCHASES: Purchase[] = [];
+
+export const DEFAULT_BRANCHES: string[] = [
+  'Sucursal Central (Principal)',
+  'Sucursal 2 (Norte)',
+  'Sucursal 3 (Sur)'
+];

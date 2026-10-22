@@ -9,6 +9,7 @@ import { broadcastViaSupabase } from './supabaseService';
 export interface SyncMessage {
   type: 
     | 'SALE_COMPLETED' 
+    | 'SALE_VOIDED'
     | 'MED_UPDATED' 
     | 'MEDS_BATCH_ADDED' 
     | 'MED_DELETED' 
@@ -17,6 +18,7 @@ export interface SyncMessage {
     | 'DISCOUNTS_UPDATED' 
     | 'PHARMACY_INFO_UPDATED'
     | 'STAFF_UPDATED'
+    | 'STOCK_TRANSFERRED'
     | 'CLEAR_DEMO'
     | 'DEMO_DATA_LOADED'
     | 'REQUEST_SYNC'

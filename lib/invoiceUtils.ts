@@ -100,7 +100,15 @@ export const generateBolivianInvoice = async (
   // Document Title
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
-  if (isReceipt) {
+  if (sale.status === 'ANULADA') {
+    doc.setTextColor(220, 38, 38);
+    doc.text('*** COMPROBANTE ANULADO ***', width / 2, y, { align: 'center' });
+    y += 3.5;
+    doc.setFontSize(6.5);
+    doc.text(`MOTIVO: ${(sale.cancellationReason || 'Anulada').toUpperCase()}`, width / 2, y, { align: 'center', maxWidth: 70 });
+    y += 4;
+    doc.setTextColor(0, 0, 0);
+  } else if (isReceipt) {
     doc.text('RECIBO DE VENTA', width / 2, y, { align: 'center' });
     y += 3.5;
     doc.setFontSize(6.5);
@@ -343,17 +351,29 @@ export const generate5x8Invoice = async (
 
   const docNumber = sale.id.replace(/\D/g, '').substring(0, 7) || Math.floor(1000000 + Math.random() * 9000000).toString();
   doc.setFontSize(8.5);
-  doc.setTextColor(16, 185, 129); // emerald
-  doc.text(`${isReceipt ? 'RECIBO' : 'FACTURA'} N° ${docNumber}`, boxX + (boxW / 2), boxY + 8.5, { align: 'center' });
+  if (sale.status === 'ANULADA') {
+    doc.setTextColor(220, 38, 38); // red
+    doc.text(`ANULADA - N° ${docNumber}`, boxX + (boxW / 2), boxY + 8.5, { align: 'center' });
+  } else {
+    doc.setTextColor(16, 185, 129); // emerald
+    doc.text(`${isReceipt ? 'RECIBO' : 'FACTURA'} N° ${docNumber}`, boxX + (boxW / 2), boxY + 8.5, { align: 'center' });
+  }
 
   doc.setFontSize(6);
-  doc.setTextColor(71, 85, 105);
-  if (!isReceipt) {
+  if (sale.status === 'ANULADA') {
+    doc.setTextColor(220, 38, 38);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`(COMPROBANTE ANULADO - SIN VALIDEZ)`, boxX + (boxW / 2), boxY + 12.5, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    doc.text(`MOTIVO: ${(sale.cancellationReason || 'Anulada').substring(0, 24)}`, boxX + (boxW / 2), boxY + 15.5, { align: 'center' });
+  } else if (!isReceipt) {
+    doc.setTextColor(71, 85, 105);
     doc.setFont('helvetica', 'normal');
     doc.text(`AUTORIZACIÓN N°:`, boxX + (boxW / 2), boxY + 12.5, { align: 'center' });
     doc.setFont('helvetica', 'bold');
     doc.text(`${pharmacyInfo.authorizationNumber || '29040011007'}`, boxX + (boxW / 2), boxY + 15.5, { align: 'center' });
   } else {
+    doc.setTextColor(71, 85, 105);
     doc.text(`(DOCUMENTO INTERNO NO FISCAL)`, boxX + (boxW / 2), boxY + 14, { align: 'center' });
   }
 

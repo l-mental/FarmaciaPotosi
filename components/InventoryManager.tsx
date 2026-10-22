@@ -9,7 +9,7 @@ import {
   ArrowDownRight, ArrowUpRight, Zap, Check,
   Sparkles, RefreshCw, Layers, CheckCircle2,
   ChevronDown, ChevronUp, Tag, FileSpreadsheet,
-  ArrowUpDown, Printer, TrendingUp, Percent
+  ArrowUpDown, Printer, TrendingUp, Percent, ArrowRightLeft
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Medication, Category, Batch, User, canUserEditInventory, PharmacyInfo } from '@/types';
@@ -35,6 +35,7 @@ interface InventoryManagerProps {
   currentUser?: User;
   currentUserRole?: 'ADMIN' | 'EMPLOYEE' | 'PHARMACIST' | 'CUSTOM';
   pharmacyInfo?: PharmacyInfo;
+  onOpenTransferModal?: (medId?: string) => void;
 }
 
 const InventoryManager: React.FC<InventoryManagerProps> = ({ 
@@ -48,7 +49,8 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
   currencySymbol, 
   currentUser,
   currentUserRole = 'ADMIN',
-  pharmacyInfo
+  pharmacyInfo,
+  onOpenTransferModal
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'ALL' | 'EXPIRED' | 'SHORT' | 'LONG' | 'MIN_STOCK' | 'MAX_STOCK'>('ALL');
@@ -279,7 +281,14 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                 stockBoxes: stockUnits,
                 stockUnits: stockUnits,
                 isControlled,
-                minStock: parseInt(row['Stock Mínimo'] ?? row['Stock Minimo'] ?? '5') || 5,
+                minStock: (() => {
+                  const rawM = row['Stock Mínimo'] ?? row['Stock Minimo'] ?? row['Stock Mín'] ?? row['Stock Min'];
+                  if (rawM !== undefined && rawM !== '') {
+                    const parsed = parseInt(String(rawM));
+                    return !isNaN(parsed) && parsed >= 0 ? parsed : 0;
+                  }
+                  return 0;
+                })(),
                 maxStock: parseInt(row['Stock Máximo'] ?? row['Stock Maximo'] ?? '50') || 50,
                 batches: [
                   {
@@ -388,7 +397,14 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                 stockBoxes,
                 stockUnits,
                 isControlled,
-                minStock: parseInt(row['Stock Mínimo'] ?? row['Stock Minimo'] ?? '5') || 5,
+                minStock: (() => {
+                  const rawM = row['Stock Mínimo'] ?? row['Stock Minimo'] ?? row['Stock Mín'] ?? row['Stock Min'];
+                  if (rawM !== undefined && rawM !== '') {
+                    const parsed = parseInt(String(rawM));
+                    return !isNaN(parsed) && parsed >= 0 ? parsed : 0;
+                  }
+                  return 0;
+                })(),
                 maxStock: parseInt(row['Stock Máximo'] ?? row['Stock Maximo'] ?? '50') || 50,
                 batches: [
                   {
@@ -740,9 +756,17 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
 
   // Helper for accurate Low Stock & Over Stock detection (works for both Box and Unit-only items)
   const isMedUnderMinStock = (m: Medication): boolean => {
-    const min = m.minStock ?? 0;
+    const min = typeof m.minStock === 'number' ? m.minStock : 0;
+    const current = (m.isUnitOnly || m.unitsPerBox === 1) 
+      ? (m.stockUnits ?? m.stockBoxes ?? 0) 
+      : (m.stockBoxes ?? 0);
+
+    if (min === 0) {
+      // Si el stock mínimo configurado es 0, solo alertar si está completamente agotado (0)
+      return current <= 0;
+    }
     if (m.isUnitOnly || m.unitsPerBox === 1) {
-      return (m.stockUnits ?? m.stockBoxes ?? 0) <= min;
+      return current <= min;
     }
     return (m.stockBoxes ?? 0) <= min || (m.stockUnits ?? 0) <= min * (m.unitsPerBox || 1);
   };
@@ -1048,7 +1072,9 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
       stockBoxes,
       stockUnits: totalUnits,
       isControlled: Boolean(formData.isControlled),
-      minStock: formData.minStock ?? 5,
+      minStock: typeof formData.minStock === 'number' && !isNaN(formData.minStock) && formData.minStock >= 0 
+        ? formData.minStock 
+        : (formData.minStock !== undefined && !isNaN(Number(formData.minStock)) ? Math.max(0, Number(formData.minStock)) : 0),
       maxStock: formData.maxStock ?? 50,
       batches: finalBatches
     };
@@ -1273,6 +1299,17 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                   <Download className="w-3.5 h-3.5 text-blue-600"/> 
                   <span className="hidden md:inline">Plantilla</span>
                 </button>
+
+                {onOpenTransferModal && (
+                  <button 
+                    onClick={() => onOpenTransferModal()}
+                    className="bg-indigo-50 border border-indigo-300 text-indigo-900 hover:bg-indigo-100 p-2.5 md:px-3.5 md:py-2.5 rounded-xl font-black flex items-center justify-center gap-1.5 transition-all text-xs shadow-sm active:scale-95"
+                    title="Pasar unidades o cajas entre sucursales"
+                  >
+                    <ArrowRightLeft className="w-3.5 h-3.5 text-indigo-600" />
+                    <span className="hidden sm:inline">Traspaso Sucursal</span>
+                  </button>
+                )}
 
                 <button 
                   onClick={() => printCriticalInventoryReport(medications, pharmacyInfo)}
@@ -3464,7 +3501,8 @@ const InputGroup: React.FC<InputGroupProps> = ({ label, value, onChange, type = 
     <input 
       type={type} 
       step={step}
-      value={value || ''} 
+      min={type === "number" ? "0" : undefined}
+      value={value !== undefined && value !== null ? value : ''} 
       placeholder={placeholder}
       onChange={e => onChange(e.target.value)}
       className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 text-xs font-bold text-slate-700 transition-all placeholder:text-slate-300" 

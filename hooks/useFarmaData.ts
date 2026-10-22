@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useRef } from 'react';
-import { Medication, User, SaleItem, InsurancePlan, Customer, SaleRecord, Currency, Supplier, Purchase, PharmacyInfo, PrescriptionData } from '@/types';
+import { Medication, User, SaleItem, InsurancePlan, Customer, SaleRecord, Currency, Supplier, Purchase, PharmacyInfo, PrescriptionData, StockTransfer } from '@/types';
 import { MOCK_MEDICATIONS, MOCK_CUSTOMERS, SUPPORTED_CURRENCIES, MOCK_STAFF, MOCK_SUPPLIERS, MOCK_SALES, MOCK_PURCHASES, DEFAULT_PHARMACY_INFO, DEFAULT_DISCOUNT_PLANS } from '@/constants';
 import { 
   getStoredSupabaseConfig, 
@@ -200,6 +200,23 @@ export const useFarmaData = () => {
     } catch {}
     return [];
   });
+
+  const [stockTransfers, setStockTransfers] = useState<StockTransfer[]>(() => {
+    try {
+      const saved = localStorage.getItem('FARMA_TRANSFERS');
+      if (saved !== null) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('FARMA_TRANSFERS', JSON.stringify(stockTransfers));
+    } catch {}
+  }, [stockTransfers]);
 
   const [currency, setCurrency] = useState<Currency>(() => {
     try {
@@ -798,7 +815,8 @@ export const useFarmaData = () => {
       userId: currentUser?.id || 'unknown',
       cashierName,
       cashRegister: assignedOrActiveRegister,
-      paymentMethod
+      paymentMethod,
+      status: 'COMPLETED'
     };
 
     lastMutationAtRef.current = Date.now();
@@ -861,6 +879,214 @@ export const useFarmaData = () => {
     broadcastSyncEvent('SALE_COMPLETED', { sale: newSale, updatedMeds });
 
     return newSale;
+  };
+
+  const handleVoidSale = (saleId: string, reason: string): { success: boolean; message: string } => {
+    const targetSale = sales.find(s => s.id === saleId);
+    if (!targetSale) {
+      return { success: false, message: 'La venta o factura no fue encontrada.' };
+    }
+    if (targetSale.status === 'ANULADA') {
+      return { success: false, message: 'Esta factura ya fue previamente anulada.' };
+    }
+
+    lastMutationAtRef.current = Date.now();
+    isInitialLoadedRef.current = true;
+
+    const voidedAt = new Date().toISOString();
+    const cancelledBy = currentUser?.name || currentUser?.username || 'Administrador';
+    const cleanReason = reason.trim() || 'Anulación solicitada por el usuario';
+
+    const updatedSale: SaleRecord = {
+      ...targetSale,
+      status: 'ANULADA',
+      cancelledAt: voidedAt,
+      cancellationReason: cleanReason,
+      cancelledBy
+    };
+
+    // 1. Update sales state and persistence
+    const updatedSales = sales.map(s => s.id === saleId ? updatedSale : s);
+    setSales(updatedSales);
+    try { localStorage.setItem('FARMA_SALES', JSON.stringify(updatedSales)); } catch {}
+    pushCollectionToSupabase('sales', updatedSales);
+
+    // 2. Restore exact stock back to medications and batches!
+    const updatedMeds = medications.map(med => {
+      const itemsToRestore = targetSale.items.filter(
+        item => item.medication.id === med.id || item.medication.name.toLowerCase() === med.name.toLowerCase()
+      );
+      if (itemsToRestore.length > 0) {
+        let newBatches = [...(med.batches || [])];
+        const unitsPerBox = med.unitsPerBox || 1;
+
+        itemsToRestore.forEach(item => {
+          const qtyUnitsToRestore = item.isFractional ? item.quantity : item.quantity * unitsPerBox;
+          const batchIdx = newBatches.findIndex(b => b.lotNumber === item.selectedBatch);
+          if (batchIdx !== -1) {
+            newBatches[batchIdx] = {
+              ...newBatches[batchIdx],
+              quantity: newBatches[batchIdx].quantity + qtyUnitsToRestore
+            };
+          } else if (newBatches.length > 0) {
+            newBatches[0] = {
+              ...newBatches[0],
+              quantity: newBatches[0].quantity + qtyUnitsToRestore
+            };
+          } else {
+            newBatches.push({
+              lotNumber: item.selectedBatch || 'LOTE-DEV',
+              expiryDate: new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString().split('T')[0],
+              quantity: qtyUnitsToRestore
+            });
+          }
+        });
+
+        const totalUnits = newBatches.reduce((sum, b) => sum + (b.quantity || 0), 0);
+        const isUnitMed = Boolean(med.isUnitOnly || med.unitsPerBox === 1);
+        const newStockBoxes = isUnitMed ? totalUnits : Math.floor(totalUnits / unitsPerBox);
+
+        return {
+          ...med,
+          batches: newBatches,
+          stockBoxes: newStockBoxes,
+          stockUnits: totalUnits
+        };
+      }
+      return med;
+    });
+
+    setMedications(updatedMeds);
+    try { localStorage.setItem('FARMA_MEDS', JSON.stringify(updatedMeds)); } catch {}
+    pushCollectionToSupabase('medications', updatedMeds);
+
+    // Broadcast instant void sync to other registers
+    broadcastSyncEvent('SALE_VOIDED', { saleId, updatedSale, updatedMeds });
+
+    return { 
+      success: true, 
+      message: `Comprobante ${saleId} anulado con éxito. Se reintegraron los productos al stock del inventario.` 
+    };
+  };
+
+  const handleTransferStock = (params: {
+    medicationId: string;
+    fromBranch: string;
+    toBranch: string;
+    quantity: number;
+    isBoxTransfer: boolean;
+    lotNumber?: string;
+    notes?: string;
+  }): { success: boolean; message: string; transfer?: StockTransfer } => {
+    const med = medications.find(m => m.id === params.medicationId);
+    if (!med) {
+      return { success: false, message: 'Medicamento no encontrado en inventario.' };
+    }
+
+    const unitsPerBox = med.unitsPerBox || 1;
+    const isUnitMed = Boolean(med.isUnitOnly || unitsPerBox === 1);
+    const quantityUnits = params.isBoxTransfer && !isUnitMed ? params.quantity * unitsPerBox : params.quantity;
+    const quantityBoxes = isUnitMed ? quantityUnits : (params.isBoxTransfer ? params.quantity : Math.floor(params.quantity / unitsPerBox));
+
+    if (quantityUnits <= 0) {
+      return { success: false, message: 'La cantidad a transferir debe ser mayor a 0.' };
+    }
+
+    const currentBranchStock = med.branchStock || {};
+    const isCentralOrigin = params.fromBranch.toLowerCase().includes('central') || params.fromBranch.toLowerCase().includes('principal');
+    const isCentralDest = params.toBranch.toLowerCase().includes('central') || params.toBranch.toLowerCase().includes('principal');
+
+    const originStockUnits = currentBranchStock[params.fromBranch]?.units ?? (isCentralOrigin ? med.stockUnits : 0);
+    const originStockBoxes = currentBranchStock[params.fromBranch]?.boxes ?? (isCentralOrigin ? med.stockBoxes : 0);
+
+    if (originStockUnits < quantityUnits) {
+      return {
+        success: false,
+        message: `Stock insuficiente en ${params.fromBranch}. Solo dispone de ${isUnitMed ? `${originStockUnits} unidades` : `${originStockBoxes} cajas (${originStockUnits} unidades)`}.`
+      };
+    }
+
+    const destStockUnits = currentBranchStock[params.toBranch]?.units ?? (isCentralDest ? med.stockUnits : 0);
+    const destStockBoxes = currentBranchStock[params.toBranch]?.boxes ?? (isCentralDest ? med.stockBoxes : 0);
+
+    const newOriginUnits = originStockUnits - quantityUnits;
+    const newOriginBoxes = isUnitMed ? newOriginUnits : Math.floor(newOriginUnits / unitsPerBox);
+
+    const newDestUnits = destStockUnits + quantityUnits;
+    const newDestBoxes = isUnitMed ? newDestUnits : Math.floor(newDestUnits / unitsPerBox);
+
+    const newBranchStock = {
+      ...currentBranchStock,
+      [params.fromBranch]: { boxes: newOriginBoxes, units: newOriginUnits },
+      [params.toBranch]: { boxes: newDestBoxes, units: newDestUnits }
+    };
+
+    let newMainUnits = med.stockUnits;
+    let newMainBoxes = med.stockBoxes;
+    let newBatches = [...(med.batches || [])];
+
+    if (isCentralOrigin) {
+      newMainUnits = Math.max(0, med.stockUnits - quantityUnits);
+      newMainBoxes = isUnitMed ? newMainUnits : Math.floor(newMainUnits / unitsPerBox);
+      let remainingToDeduct = quantityUnits;
+      newBatches = newBatches.map(b => {
+        if (remainingToDeduct <= 0) return b;
+        const deduct = Math.min(b.quantity, remainingToDeduct);
+        remainingToDeduct -= deduct;
+        return { ...b, quantity: b.quantity - deduct };
+      });
+    } else if (isCentralDest) {
+      newMainUnits = med.stockUnits + quantityUnits;
+      newMainBoxes = isUnitMed ? newMainUnits : Math.floor(newMainUnits / unitsPerBox);
+      if (newBatches.length > 0) {
+        newBatches[0] = { ...newBatches[0], quantity: newBatches[0].quantity + quantityUnits };
+      }
+    }
+
+    const updatedMed: Medication = {
+      ...med,
+      batches: newBatches,
+      stockBoxes: newMainBoxes,
+      stockUnits: newMainUnits,
+      branchStock: newBranchStock
+    };
+
+    const newTransfer: StockTransfer = {
+      id: 'TRF_' + Date.now(),
+      timestamp: new Date().toISOString(),
+      medicationId: med.id,
+      medicationName: med.name,
+      fromBranch: params.fromBranch,
+      toBranch: params.toBranch,
+      quantityUnits,
+      quantityBoxes,
+      isBoxTransfer: params.isBoxTransfer,
+      lotNumber: params.lotNumber || med.batches?.[0]?.lotNumber || 'LOTE-TRF',
+      responsibleUser: currentUser?.name || currentUser?.username || 'Administrador',
+      notes: params.notes || ''
+    };
+
+    lastMutationAtRef.current = Date.now();
+    isInitialLoadedRef.current = true;
+
+    setStockTransfers(prev => {
+      const next = [newTransfer, ...prev];
+      try { localStorage.setItem('FARMA_TRANSFERS', JSON.stringify(next)); } catch {}
+      return next;
+    });
+
+    const updatedMeds = medications.map(m => m.id === med.id ? updatedMed : m);
+    setMedications(updatedMeds);
+    try { localStorage.setItem('FARMA_MEDS', JSON.stringify(updatedMeds)); } catch {}
+    pushCollectionToSupabase('medications', updatedMeds);
+
+    broadcastSyncEvent('STOCK_TRANSFERRED', { transfer: newTransfer, updatedMeds });
+
+    return {
+      success: true,
+      message: `¡Traspaso confirmado! Se movieron ${params.isBoxTransfer && !isUnitMed ? `${quantityBoxes} cajas` : `${quantityUnits} unidades`} de "${med.name}" desde ${params.fromBranch} hacia ${params.toBranch}.`,
+      transfer: newTransfer
+    };
   };
 
   const handleRegisterPurchase = (purchase: Purchase) => {
@@ -1265,6 +1491,10 @@ export const useFarmaData = () => {
     autoSyncRoom,
     autoSyncLastTime,
     handleTriggerAutoSync,
+    handleVoidSale,
+    handleTransferStock,
+    stockTransfers,
+    setStockTransfers,
     resetToMockData
   };
 };

@@ -18,6 +18,8 @@ import SettingsModal from '@/components/modals/SettingsModal';
 import NewPatientModal from '@/components/modals/NewPatientModal';
 import SystemNotificationBanner from '@/components/SystemNotificationBanner';
 import { SupabaseSetupModal } from '@/components/modals/SupabaseSetupModal';
+import { StockTransferModal } from '@/components/modals/StockTransferModal';
+import { SalesPulseWidget } from '@/components/widgets/SalesPulseWidget';
 import { getStoredSupabaseConfig, pullAllFromSupabase } from '@/services/supabaseService';
 import { canUserAccessSection } from '@/types';
 import { Database } from 'lucide-react';
@@ -78,6 +80,9 @@ const AppContent: React.FC = () => {
     handleDisconnectCloud,
     handleManualCloudSync,
     handleTestCloudConnection,
+    handleVoidSale,
+    handleTransferStock,
+    stockTransfers,
     resetToMockData
   } = useFarmaData();
 
@@ -95,6 +100,8 @@ const AppContent: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSupabaseSetupOpen, setIsSupabaseSetupOpen] = useState(false);
   const [isNewPatientModalOpen, setIsNewPatientModalOpen] = useState(false);
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [transferMedId, setTransferMedId] = useState<string | undefined>();
   const location = useLocation();
 
   // Apply dark mode class
@@ -238,6 +245,10 @@ const AppContent: React.FC = () => {
                   currentUser={currentUser}
                   currentUserRole={currentUser.role}
                   pharmacyInfo={pharmacyInfo}
+                  onOpenTransferModal={(id) => {
+                    setTransferMedId(id);
+                    setIsTransferModalOpen(true);
+                  }}
                 />
               ) : <Navigate to={defaultPath} replace />
             } />
@@ -250,6 +261,7 @@ const AppContent: React.FC = () => {
                   currentUserRole={currentUser.role}
                   pharmacyInfo={pharmacyInfo}
                   staff={staff}
+                  onVoidSale={handleVoidSale}
                 />
               ) : <Navigate to={defaultPath} replace />
             } />
@@ -309,6 +321,29 @@ const AppContent: React.FC = () => {
       <MobileNav 
         activeTab={activeTab} 
         currentUser={currentUser} 
+      />
+
+      {/* Floating Sales Pulse Widget: Persistente, no incisivo, configurable por día, semana, mes, bimestre, trimestre, año */}
+      <div className="fixed bottom-20 md:bottom-5 right-4 z-30 pointer-events-auto">
+        <SalesPulseWidget
+          sales={sales}
+          currencySymbol={currency.symbol}
+          pharmacyInfo={pharmacyInfo}
+        />
+      </div>
+
+      <StockTransferModal
+        isOpen={isTransferModalOpen}
+        onClose={() => {
+          setIsTransferModalOpen(false);
+          setTransferMedId(undefined);
+        }}
+        medications={medications}
+        transfers={stockTransfers}
+        onTransfer={handleTransferStock}
+        currencySymbol={currency.symbol}
+        currentUserRole={currentUser.role}
+        initialMedicationId={transferMedId}
       />
 
       <SettingsModal 

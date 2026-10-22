@@ -53,7 +53,11 @@ export const usePeriodicAlerts = (medications: Medication[]) => {
     const lowStock = safeMeds.filter(m => {
       const isUnit = m.isUnitOnly || m.unitsPerBox === 1;
       const current = isUnit ? (m.stockUnits ?? m.stockBoxes ?? 0) : (m.stockBoxes ?? 0);
-      return current <= (m.minStock ?? 0);
+      const min = typeof m.minStock === 'number' ? m.minStock : 0;
+      if (min === 0) {
+        return current <= 0;
+      }
+      return current <= min;
     });
     const expired = safeMeds.filter(m => {
       const exp = m.batches?.[0]?.expiryDate;
