@@ -202,7 +202,7 @@ const AppContent: React.FC = () => {
           isSyncingWithCloud={isSyncingWithCloud}
         />
 
-        <div className="flex-1 overflow-y-auto">
+        <div className={`flex-1 min-h-0 ${activeTab === 'POS' ? 'overflow-hidden flex flex-col' : 'overflow-y-auto'}`}>
           <Routes>
             <Route path="/" element={<Navigate to={defaultPath} replace />} />
 
