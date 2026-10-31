@@ -173,6 +173,7 @@ export type SaleStatus = 'COMPLETED' | 'ANULADA';
 
 export interface SaleRecord {
   id: string;
+  invoiceNumber?: string;
   timestamp: string;
   items: SaleItem[];
   total: number;

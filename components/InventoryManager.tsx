@@ -74,7 +74,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
   
   // Quick restock modal state
   const [restockMed, setRestockMed] = useState<Medication | null>(null);
-  const [restockBoxes, setRestockBoxes] = useState<number>(5);
+  const [restockBoxes, setRestockBoxes] = useState<number | ''>(5);
   const [restockByUnit, setRestockByUnit] = useState<boolean>(false);
   const [restockLot, setRestockLot] = useState<string>('');
   const [restockExpiry, setRestockExpiry] = useState<string>('');
@@ -89,7 +89,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
   const [quickProfitUnitPercent, setQuickProfitUnitPercent] = useState<number | ''>(50);
   const [quickPriceUnit, setQuickPriceUnit] = useState<number | ''>(1.5);
   const [quickBoxes, setQuickBoxes] = useState<number | ''>(10);
-  const [quickUnitsPerBox, setQuickUnitsPerBox] = useState<number>(20);
+  const [quickUnitsPerBox, setQuickUnitsPerBox] = useState<number | ''>(20);
   const [quickMinStock, setQuickMinStock] = useState<number | ''>(5);
   const [quickMaxStock, setQuickMaxStock] = useState<number | ''>(50);
   const [quickLot, setQuickLot] = useState<string>(() => generateAutoLot());
@@ -601,8 +601,23 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
     );
   };
 
+type MedFormData = Omit<Partial<Medication>, 'minStock' | 'maxStock' | 'stockBoxes' | 'stockUnits' | 'unitsPerBox' | 'costPriceBox' | 'costPriceUnit' | 'profitMarginPercent' | 'profitMarginUnitPercent' | 'priceBox' | 'priceUnit'> & {
+  minStock?: number | '';
+  maxStock?: number | '';
+  stockBoxes?: number | '';
+  stockUnits?: number | '';
+  unitsPerBox?: number | '';
+  costPriceBox?: number | '';
+  costPriceUnit?: number | '';
+  profitMarginPercent?: number | '';
+  profitMarginUnitPercent?: number | '';
+  priceBox?: number | '';
+  priceUnit?: number | '';
+  [key: string]: any;
+};
+
   // Form State for Modal
-  const [formData, setFormData] = useState<Partial<Medication>>({
+  const [formData, setFormData] = useState<MedFormData>({
     name: '',
     genericName: '',
     laboratory: '',
@@ -919,7 +934,8 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
 
   const handleConfirmRestock = () => {
     if (!restockMed) return;
-    if (restockBoxes <= 0) {
+    const qtyBoxes = typeof restockBoxes === 'number' ? restockBoxes : (Number(restockBoxes) || 0);
+    if (qtyBoxes <= 0) {
       alert(`Por favor ingrese una cantidad mayor a 0 ${restockByUnit ? 'unidades' : 'cajas'}.`);
       return;
     }
@@ -933,7 +949,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
     }
 
     const isMedUnitOnly = Boolean(restockMed.isUnitOnly || restockMed.unitsPerBox === 1);
-    const unitsAdded = restockByUnit ? restockBoxes : restockBoxes * restockMed.unitsPerBox;
+    const unitsAdded = restockByUnit ? qtyBoxes : qtyBoxes * restockMed.unitsPerBox;
     const newTotalUnits = restockMed.stockUnits + unitsAdded;
     const newStockBoxes = isMedUnitOnly ? newTotalUnits : Math.floor(newTotalUnits / (restockMed.unitsPerBox || 1));
 
@@ -1074,8 +1090,10 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
       isControlled: Boolean(formData.isControlled),
       minStock: typeof formData.minStock === 'number' && !isNaN(formData.minStock) && formData.minStock >= 0 
         ? formData.minStock 
-        : (formData.minStock !== undefined && !isNaN(Number(formData.minStock)) ? Math.max(0, Number(formData.minStock)) : 0),
-      maxStock: formData.maxStock ?? 50,
+        : (formData.minStock !== undefined && formData.minStock !== '' && !isNaN(Number(formData.minStock)) ? Math.max(0, Number(formData.minStock)) : 0),
+      maxStock: typeof formData.maxStock === 'number' && !isNaN(formData.maxStock) && formData.maxStock >= 0
+        ? formData.maxStock
+        : (formData.maxStock !== undefined && formData.maxStock !== '' && !isNaN(Number(formData.maxStock)) ? Math.max(0, Number(formData.maxStock)) : 50),
       batches: finalBatches
     };
 
@@ -1680,9 +1698,9 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                     </span>
                     <input
                       type="number"
-                      min="1"
+                      min="0"
                       value={quickMaxStock}
-                      onChange={(e) => setQuickMaxStock(e.target.value === '' ? '' : Math.max(1, parseInt(e.target.value) || 1))}
+                      onChange={(e) => setQuickMaxStock(e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0))}
                       className="w-11 text-[10px] font-black text-slate-700 bg-transparent outline-none text-center"
                     />
                   </div>
@@ -2363,11 +2381,11 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                               <div className="relative">
                                 <input
                                   type="number"
-                                  min="1"
+                                  min="0"
                                   required
-                                  value={formData.stockUnits ?? formData.stockBoxes ?? ''}
+                                  value={formData.stockUnits !== undefined && formData.stockUnits !== null ? formData.stockUnits : (formData.stockBoxes !== undefined && formData.stockBoxes !== null ? formData.stockBoxes : '')}
                                   onChange={(e) => {
-                                    const unitsQty = parseInt(e.target.value) || 0;
+                                    const unitsQty = e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0);
                                     setFormData({
                                       ...formData,
                                       unitsPerBox: 1,
@@ -2393,16 +2411,16 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                                   type="number"
                                   min="0"
                                   required
-                                  value={formData.minStock ?? 3}
+                                  value={formData.minStock !== undefined && formData.minStock !== null ? formData.minStock : ''}
                                   onChange={(e) => {
-                                    const minVal = e.target.value === '' ? 0 : Math.max(0, parseInt(e.target.value) || 0);
+                                    const minVal = e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0);
                                     setFormData({
                                       ...formData,
                                       minStock: minVal
                                     });
                                   }}
                                   className="w-full px-3 py-2 bg-orange-50/60 border-2 border-orange-300 rounded-xl text-sm font-black text-orange-950 outline-none focus:ring-2 focus:ring-orange-500"
-                                  placeholder="Ej: 3"
+                                  placeholder="0"
                                 />
                                 <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-orange-700">
                                   uds mín.
@@ -2417,10 +2435,10 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                               <div className="relative">
                                 <input
                                   type="number"
-                                  min="1"
-                                  value={formData.maxStock ?? 50}
+                                  min="0"
+                                  value={formData.maxStock !== undefined && formData.maxStock !== null ? formData.maxStock : ''}
                                   onChange={(e) => {
-                                    const maxVal = e.target.value === '' ? 50 : Math.max(1, parseInt(e.target.value) || 1);
+                                    const maxVal = e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0);
                                     setFormData({
                                       ...formData,
                                       maxStock: maxVal
@@ -2436,8 +2454,8 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                             </div>
 
                             <div className="sm:col-span-3 flex items-center justify-between text-[11px] bg-orange-50 text-orange-900 px-3 py-1.5 rounded-lg border border-orange-200 font-bold">
-                              <span>🔔 Alarma de Bajo Stock: sonará cuando queden <strong>{formData.minStock ?? 3} unidades</strong> o menos.</span>
-                              {(formData.stockUnits ?? 0) <= (formData.minStock ?? 3) && (
+                              <span>🔔 Alarma de Bajo Stock: sonará cuando queden <strong>{formData.minStock !== '' && formData.minStock !== undefined ? `${formData.minStock} unidades` : '0 unidades'}</strong> o menos.</span>
+                              {(Number(formData.stockUnits) || 0) <= (Number(formData.minStock) || 0) && (
                                 <span className="text-rose-600 font-black">⚠️ Stock actual en nivel de alarma</span>
                               )}
                             </div>
@@ -2455,11 +2473,11 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                                   min="0"
                                   placeholder="0.00"
                                   required
-                                  value={formData.costPriceBox ?? ''}
+                                  value={formData.costPriceBox !== undefined && formData.costPriceBox !== null ? formData.costPriceBox : ''}
                                   onChange={(e) => {
-                                    const cost = e.target.value === '' ? 0 : parseFloat(e.target.value);
-                                    const profit = formData.profitMarginPercent ?? 40;
-                                    const newPrice = parseFloat((cost * (1 + profit / 100)).toFixed(2));
+                                    const cost = e.target.value === '' ? '' : parseFloat(e.target.value);
+                                    const profit = typeof formData.profitMarginPercent === 'number' ? formData.profitMarginPercent : 40;
+                                    const newPrice = typeof cost === 'number' ? parseFloat((cost * (1 + profit / 100)).toFixed(2)) : '';
                                     setFormData({
                                       ...formData,
                                       costPriceBox: cost,
@@ -2485,14 +2503,15 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                                   type="number"
                                   step="1"
                                   placeholder="40"
-                                  value={formData.profitMarginPercent ?? ''}
+                                  value={formData.profitMarginPercent !== undefined && formData.profitMarginPercent !== null ? formData.profitMarginPercent : ''}
                                   onChange={(e) => {
-                                    const profit = e.target.value === '' ? 0 : parseFloat(e.target.value);
-                                    const cost = formData.costPriceBox || 0;
-                                    const newPrice = parseFloat((cost * (1 + profit / 100)).toFixed(2));
+                                    const profit = e.target.value === '' ? '' : parseFloat(e.target.value);
+                                    const cost = typeof formData.costPriceBox === 'number' ? formData.costPriceBox : 0;
+                                    const newPrice = (typeof profit === 'number' && cost > 0) ? parseFloat((cost * (1 + profit / 100)).toFixed(2)) : formData.priceBox;
                                     setFormData({
                                       ...formData,
                                       profitMarginPercent: profit,
+                                      profitMarginUnitPercent: profit,
                                       priceBox: newPrice,
                                       priceUnit: newPrice
                                     });
@@ -2513,16 +2532,17 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                                   step="0.5"
                                   min="0"
                                   required
-                                  value={formData.priceBox || ''}
+                                  value={formData.priceBox !== undefined && formData.priceBox !== null ? formData.priceBox : ''}
                                   onChange={(e) => {
-                                    const pu = parseFloat(e.target.value) || 0;
-                                    const cost = formData.costPriceBox || 0;
-                                    const newProfit = cost > 0 ? parseFloat((((pu - cost) / cost) * 100).toFixed(1)) : 0;
+                                    const pu = e.target.value === '' ? '' : parseFloat(e.target.value);
+                                    const cost = typeof formData.costPriceBox === 'number' ? formData.costPriceBox : 0;
+                                    const newProfit = (typeof pu === 'number' && cost > 0) ? parseFloat((((pu - cost) / cost) * 100).toFixed(1)) : 0;
                                     setFormData({
                                       ...formData,
                                       priceBox: pu,
                                       priceUnit: pu,
-                                      profitMarginPercent: newProfit
+                                      profitMarginPercent: newProfit,
+                                      profitMarginUnitPercent: newProfit
                                     });
                                   }}
                                   className="w-full px-3 py-2 bg-white border-2 border-blue-400 rounded-xl text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
@@ -2549,19 +2569,20 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                               </label>
                               <input
                                 type="number"
-                                min="1"
+                                min="0"
                                 required
-                                value={formData.stockBoxes || ''}
+                                value={formData.stockBoxes !== undefined && formData.stockBoxes !== null ? formData.stockBoxes : ''}
                                 onChange={(e) => {
-                                  const boxes = parseInt(e.target.value) || 0;
-                                  const units = formData.unitsPerBox || 20;
+                                  const boxes = e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0);
+                                  const units = typeof formData.unitsPerBox === 'number' ? formData.unitsPerBox : 20;
                                   setFormData({
                                     ...formData,
                                     stockBoxes: boxes,
-                                    stockUnits: boxes * units
+                                    stockUnits: typeof boxes === 'number' ? boxes * units : ''
                                   });
                                 }}
                                 className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500"
+                                placeholder="10"
                               />
                             </div>
 
@@ -2572,23 +2593,24 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                               <input
                                 type="number"
                                 min="1"
-                                value={formData.unitsPerBox || 20}
+                                value={formData.unitsPerBox !== undefined && formData.unitsPerBox !== null ? formData.unitsPerBox : ''}
                                 onChange={(e) => {
-                                  const units = parseInt(e.target.value) || 1;
-                                  const boxes = formData.stockBoxes || 0;
-                                  const costBox = formData.costPriceBox || 0;
-                                  const newCostUnit = parseFloat((costBox / units).toFixed(2));
-                                  const pctUnit = formData.profitMarginUnitPercent ?? formData.profitMarginPercent ?? 50;
-                                  const newPriceUnit = parseFloat((newCostUnit * (1 + pctUnit / 100)).toFixed(2));
+                                  const units = e.target.value === '' ? '' : Math.max(1, parseInt(e.target.value) || 1);
+                                  const boxes = typeof formData.stockBoxes === 'number' ? formData.stockBoxes : 0;
+                                  const costBox = typeof formData.costPriceBox === 'number' ? formData.costPriceBox : 0;
+                                  const newCostUnit = typeof units === 'number' && units > 0 ? parseFloat((costBox / units).toFixed(2)) : '';
+                                  const pctUnit = typeof formData.profitMarginUnitPercent === 'number' ? formData.profitMarginUnitPercent : (typeof formData.profitMarginPercent === 'number' ? formData.profitMarginPercent : 50);
+                                  const newPriceUnit = typeof newCostUnit === 'number' ? parseFloat((newCostUnit * (1 + pctUnit / 100)).toFixed(2)) : '';
                                   setFormData({
                                     ...formData,
                                     unitsPerBox: units,
-                                    stockUnits: boxes * units,
+                                    stockUnits: typeof units === 'number' ? boxes * units : '',
                                     costPriceUnit: newCostUnit,
                                     priceUnit: newPriceUnit
                                   });
                                 }}
                                 className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500"
+                                placeholder="20"
                               />
                             </div>
 
@@ -2600,15 +2622,16 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                                 type="number"
                                 min="0"
                                 required
-                                value={formData.minStock ?? 5}
+                                value={formData.minStock !== undefined && formData.minStock !== null ? formData.minStock : ''}
                                 onChange={(e) => {
-                                  const minVal = e.target.value === '' ? 0 : Math.max(0, parseInt(e.target.value) || 0);
+                                  const minVal = e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0);
                                   setFormData({
                                     ...formData,
                                     minStock: minVal
                                   });
                                 }}
                                 className="w-full px-3 py-2 bg-orange-50/60 border-2 border-orange-300 rounded-xl text-sm font-black text-orange-950 outline-none focus:ring-2 focus:ring-orange-500"
+                                placeholder="0"
                                 title="Cuando queden esta cantidad de cajas o menos, sonará la alarma de Bajo Stock"
                               />
                             </div>
@@ -2619,22 +2642,23 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                               </label>
                               <input
                                 type="number"
-                                min="1"
-                                value={formData.maxStock ?? 50}
+                                min="0"
+                                value={formData.maxStock !== undefined && formData.maxStock !== null ? formData.maxStock : ''}
                                 onChange={(e) => {
-                                  const maxVal = e.target.value === '' ? 50 : Math.max(1, parseInt(e.target.value) || 1);
+                                  const maxVal = e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0);
                                   setFormData({
                                     ...formData,
                                     maxStock: maxVal
                                   });
                                 }}
                                 className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-emerald-500"
+                                placeholder="50"
                               />
                             </div>
 
                             <div className="col-span-2 sm:col-span-4 flex flex-wrap items-center justify-between text-[11px] bg-orange-50 text-orange-900 px-3 py-1.5 rounded-lg border border-orange-200 font-bold">
-                              <span>🔔 Alarma de Bajo Stock: sonará cuando queden <strong>{formData.minStock ?? 5} cajas</strong> ({(formData.minStock ?? 5) * (formData.unitsPerBox || 20)} unidades) o menos.</span>
-                              {(formData.stockBoxes ?? 0) <= (formData.minStock ?? 5) && (
+                              <span>🔔 Alarma de Bajo Stock: sonará cuando queden <strong>{formData.minStock !== '' && formData.minStock !== undefined ? `${formData.minStock} cajas` : '0 cajas'}</strong> ({((Number(formData.minStock) || 0) * (Number(formData.unitsPerBox) || 20))} unidades) o menos.</span>
+                              {(Number(formData.stockBoxes) || 0) <= (Number(formData.minStock) || 0) && (
                                 <span className="text-rose-600 font-black">⚠️ Stock actual en nivel de alarma</span>
                               )}
                             </div>
@@ -2647,7 +2671,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                                 📦 A. Precio y % de Ganancia por CAJA
                               </span>
                               <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
-                                Ganancia Caja: {(formData.profitMarginPercent ?? 0) >= 0 ? `+${formData.profitMarginPercent ?? 0}%` : `${formData.profitMarginPercent ?? 0}%`}
+                                Ganancia Caja: {(Number(formData.profitMarginPercent) || 0) >= 0 ? `+${formData.profitMarginPercent ?? 0}%` : `${formData.profitMarginPercent ?? 0}%`}
                               </span>
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -2663,15 +2687,15 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                                     min="0"
                                     placeholder="0.00"
                                     required
-                                    value={formData.costPriceBox ?? ''}
+                                    value={formData.costPriceBox !== undefined && formData.costPriceBox !== null ? formData.costPriceBox : ''}
                                     onChange={(e) => {
-                                      const cost = e.target.value === '' ? 0 : parseFloat(e.target.value);
-                                      const units = formData.unitsPerBox || 20;
-                                      const profitBox = formData.profitMarginPercent ?? 50;
-                                      const profitUnit = formData.profitMarginUnitPercent ?? profitBox;
-                                      const newCostUnit = parseFloat((cost / units).toFixed(2));
-                                      const newPriceBox = parseFloat((cost * (1 + profitBox / 100)).toFixed(2));
-                                      const newPriceUnit = parseFloat((newCostUnit * (1 + profitUnit / 100)).toFixed(2));
+                                      const cost = e.target.value === '' ? '' : parseFloat(e.target.value);
+                                      const units = typeof formData.unitsPerBox === 'number' ? formData.unitsPerBox : 20;
+                                      const profitBox = typeof formData.profitMarginPercent === 'number' ? formData.profitMarginPercent : 50;
+                                      const profitUnit = typeof formData.profitMarginUnitPercent === 'number' ? formData.profitMarginUnitPercent : profitBox;
+                                      const newCostUnit = typeof cost === 'number' ? parseFloat((cost / units).toFixed(2)) : '';
+                                      const newPriceBox = typeof cost === 'number' ? parseFloat((cost * (1 + profitBox / 100)).toFixed(2)) : '';
+                                      const newPriceUnit = typeof newCostUnit === 'number' ? parseFloat((newCostUnit * (1 + profitUnit / 100)).toFixed(2)) : '';
                                       setFormData({
                                         ...formData,
                                         costPriceBox: cost,
@@ -2699,11 +2723,11 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                                     step="0.5"
                                     placeholder="50"
                                     required
-                                    value={formData.profitMarginPercent ?? ''}
+                                    value={formData.profitMarginPercent !== undefined && formData.profitMarginPercent !== null ? formData.profitMarginPercent : ''}
                                     onChange={(e) => {
-                                      const profit = e.target.value === '' ? 0 : parseFloat(e.target.value);
-                                      const cost = formData.costPriceBox || 0;
-                                      const newPriceBox = parseFloat((cost * (1 + profit / 100)).toFixed(2));
+                                      const profit = e.target.value === '' ? '' : parseFloat(e.target.value);
+                                      const cost = typeof formData.costPriceBox === 'number' ? formData.costPriceBox : 0;
+                                      const newPriceBox = (typeof profit === 'number' && cost > 0) ? parseFloat((cost * (1 + profit / 100)).toFixed(2)) : formData.priceBox;
                                       setFormData({
                                         ...formData,
                                         profitMarginPercent: profit,
@@ -2727,11 +2751,11 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                                     step="0.5"
                                     min="0"
                                     required
-                                    value={formData.priceBox ?? ''}
+                                    value={formData.priceBox !== undefined && formData.priceBox !== null ? formData.priceBox : ''}
                                     onChange={(e) => {
-                                      const priceBox = e.target.value === '' ? 0 : parseFloat(e.target.value);
-                                      const cost = formData.costPriceBox || 0;
-                                      const newProfit = cost > 0 ? parseFloat((((priceBox - cost) / cost) * 100).toFixed(1)) : 0;
+                                      const priceBox = e.target.value === '' ? '' : parseFloat(e.target.value);
+                                      const cost = typeof formData.costPriceBox === 'number' ? formData.costPriceBox : 0;
+                                      const newProfit = (typeof priceBox === 'number' && cost > 0) ? parseFloat((((priceBox - cost) / cost) * 100).toFixed(1)) : 0;
                                       setFormData({
                                         ...formData,
                                         priceBox,
@@ -2755,7 +2779,7 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                                 💊 B. Precio y % de Ganancia por CADA UNIDAD (de la Caja)
                               </span>
                               <span className="text-[10px] font-bold text-blue-700 bg-blue-100/80 px-2 py-0.5 rounded-full">
-                                Ganancia Unidad: {(formData.profitMarginUnitPercent ?? formData.profitMarginPercent ?? 0) >= 0 ? `+${formData.profitMarginUnitPercent ?? formData.profitMarginPercent ?? 0}%` : `${formData.profitMarginUnitPercent ?? formData.profitMarginPercent ?? 0}%`}
+                                Ganancia Unidad: {(Number(formData.profitMarginUnitPercent) || Number(formData.profitMarginPercent) || 0) >= 0 ? `+${formData.profitMarginUnitPercent ?? formData.profitMarginPercent ?? 0}%` : `${formData.profitMarginUnitPercent ?? formData.profitMarginPercent ?? 0}%`}
                               </span>
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -2769,15 +2793,15 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                                     type="number"
                                     step="0.05"
                                     min="0"
-                                    value={formData.costPriceUnit ?? parseFloat(((formData.costPriceBox || 0) / (formData.unitsPerBox || 20)).toFixed(2))}
+                                    value={formData.costPriceUnit !== undefined && formData.costPriceUnit !== null ? formData.costPriceUnit : ''}
                                     onChange={(e) => {
-                                      const costUnit = e.target.value === '' ? 0 : parseFloat(e.target.value);
-                                      const units = formData.unitsPerBox || 20;
-                                      const newCostBox = parseFloat((costUnit * units).toFixed(2));
-                                      const profitBox = formData.profitMarginPercent ?? 50;
-                                      const profitUnit = formData.profitMarginUnitPercent ?? profitBox;
-                                      const newPriceBox = parseFloat((newCostBox * (1 + profitBox / 100)).toFixed(2));
-                                      const newPriceUnit = parseFloat((costUnit * (1 + profitUnit / 100)).toFixed(2));
+                                      const costUnit = e.target.value === '' ? '' : parseFloat(e.target.value);
+                                      const units = typeof formData.unitsPerBox === 'number' ? formData.unitsPerBox : 20;
+                                      const newCostBox = typeof costUnit === 'number' ? parseFloat((costUnit * units).toFixed(2)) : '';
+                                      const profitBox = typeof formData.profitMarginPercent === 'number' ? formData.profitMarginPercent : 50;
+                                      const profitUnit = typeof formData.profitMarginUnitPercent === 'number' ? formData.profitMarginUnitPercent : profitBox;
+                                      const newPriceBox = typeof newCostBox === 'number' ? parseFloat((newCostBox * (1 + profitBox / 100)).toFixed(2)) : '';
+                                      const newPriceUnit = typeof costUnit === 'number' ? parseFloat((costUnit * (1 + profitUnit / 100)).toFixed(2)) : '';
                                       setFormData({
                                         ...formData,
                                         costPriceUnit: costUnit,
@@ -2804,12 +2828,12 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                                     type="number"
                                     step="0.5"
                                     placeholder="50"
-                                    value={formData.profitMarginUnitPercent ?? formData.profitMarginPercent ?? ''}
+                                    value={formData.profitMarginUnitPercent !== undefined && formData.profitMarginUnitPercent !== null ? formData.profitMarginUnitPercent : (formData.profitMarginPercent !== undefined && formData.profitMarginPercent !== null ? formData.profitMarginPercent : '')}
                                     onChange={(e) => {
-                                      const profitUnit = e.target.value === '' ? 0 : parseFloat(e.target.value);
-                                      const units = formData.unitsPerBox || 20;
-                                      const costUnit = formData.costPriceUnit ?? ((formData.costPriceBox || 0) / units);
-                                      const newPriceUnit = parseFloat((costUnit * (1 + profitUnit / 100)).toFixed(2));
+                                      const profitUnit = e.target.value === '' ? '' : parseFloat(e.target.value);
+                                      const units = typeof formData.unitsPerBox === 'number' ? formData.unitsPerBox : 20;
+                                      const costUnit = typeof formData.costPriceUnit === 'number' ? formData.costPriceUnit : ((typeof formData.costPriceBox === 'number' ? formData.costPriceBox : 0) / units);
+                                      const newPriceUnit = (typeof profitUnit === 'number' && costUnit > 0) ? parseFloat((costUnit * (1 + profitUnit / 100)).toFixed(2)) : formData.priceUnit;
                                       setFormData({
                                         ...formData,
                                         profitMarginUnitPercent: profitUnit,
@@ -2832,12 +2856,12 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                                     type="number"
                                     step="0.1"
                                     min="0"
-                                    value={formData.priceUnit ?? ''}
+                                    value={formData.priceUnit !== undefined && formData.priceUnit !== null ? formData.priceUnit : ''}
                                     onChange={(e) => {
-                                      const pu = e.target.value === '' ? 0 : parseFloat(e.target.value);
-                                      const units = formData.unitsPerBox || 20;
-                                      const costUnit = formData.costPriceUnit ?? ((formData.costPriceBox || 0) / units);
-                                      const newProfitUnit = costUnit > 0 ? parseFloat((((pu - costUnit) / costUnit) * 100).toFixed(1)) : 0;
+                                      const pu = e.target.value === '' ? '' : parseFloat(e.target.value);
+                                      const units = typeof formData.unitsPerBox === 'number' ? formData.unitsPerBox : 20;
+                                      const costUnit = typeof formData.costPriceUnit === 'number' ? formData.costPriceUnit : ((typeof formData.costPriceBox === 'number' ? formData.costPriceBox : 0) / units);
+                                      const newProfitUnit = (typeof pu === 'number' && costUnit > 0) ? parseFloat((((pu - costUnit) / costUnit) * 100).toFixed(1)) : 0;
                                       setFormData({
                                         ...formData,
                                         priceUnit: pu,
@@ -3008,27 +3032,27 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                           <InputGroup 
                             label="Unidades Compradas (Ej: 8) *" 
                             type="number" 
-                            value={(formData.stockUnits ?? formData.stockBoxes)?.toString()} 
+                            value={formData.stockUnits !== undefined && formData.stockUnits !== null ? formData.stockUnits.toString() : (formData.stockBoxes !== undefined && formData.stockBoxes !== null ? formData.stockBoxes.toString() : '')} 
                             onChange={v => {
-                              const uQty = parseInt(v) || 0;
+                              const uQty = v === '' ? '' : Math.max(0, parseInt(v) || 0);
                               setFormData({ ...formData, unitsPerBox: 1, stockBoxes: uQty, stockUnits: uQty });
                             }} 
                           />
                           <InputGroup 
                             label="⚠️ Stock Mínimo (Unidades Alarma) *" 
                             type="number" 
-                            value={(formData.minStock ?? 3).toString()} 
+                            value={formData.minStock !== undefined && formData.minStock !== null ? formData.minStock.toString() : ''} 
                             onChange={v => {
-                              const minVal = v === '' ? 0 : Math.max(0, parseInt(v) || 0);
+                              const minVal = v === '' ? '' : Math.max(0, parseInt(v) || 0);
                               setFormData({ ...formData, minStock: minVal });
                             }} 
                           />
                           <InputGroup 
                             label="Stock Máximo (Unidades)" 
                             type="number" 
-                            value={(formData.maxStock ?? 50).toString()} 
+                            value={formData.maxStock !== undefined && formData.maxStock !== null ? formData.maxStock.toString() : ''} 
                             onChange={v => {
-                              const maxVal = v === '' ? 50 : Math.max(1, parseInt(v) || 1);
+                              const maxVal = v === '' ? '' : Math.max(0, parseInt(v) || 0);
                               setFormData({ ...formData, maxStock: maxVal });
                             }} 
                           />
@@ -3038,15 +3062,15 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                             label={`Costo x 1 Unidad (${currencySymbol})`} 
                             type="number" 
                             step="0.1" 
-                            value={formData.costPriceBox?.toString() || ''} 
+                            value={formData.costPriceBox !== undefined && formData.costPriceBox !== null ? formData.costPriceBox.toString() : ''} 
                             onChange={v => {
-                              const cost = parseFloat(v) || 0;
-                              const profit = formData.profitMarginPercent ?? 40;
-                              const pu = parseFloat((cost * (1 + profit / 100)).toFixed(2));
+                              const cost = v === '' ? '' : parseFloat(v);
+                              const profit = typeof formData.profitMarginPercent === 'number' ? formData.profitMarginPercent : 40;
+                              const pu = typeof cost === 'number' ? parseFloat((cost * (1 + profit / 100)).toFixed(2)) : '';
                               setFormData({ 
                                 ...formData, 
                                 costPriceBox: cost, 
-                                costPriceUnit: cost,
+                                costPriceUnit: cost, 
                                 priceBox: pu, 
                                 priceUnit: pu 
                               });
@@ -3056,15 +3080,15 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                             label="% Ganancia Unidad" 
                             type="number" 
                             step="0.5" 
-                            value={formData.profitMarginPercent?.toString() || ''} 
+                            value={formData.profitMarginPercent !== undefined && formData.profitMarginPercent !== null ? formData.profitMarginPercent.toString() : ''} 
                             onChange={v => {
-                              const profit = parseFloat(v) || 0;
-                              const cost = formData.costPriceBox || 0;
-                              const pu = parseFloat((cost * (1 + profit / 100)).toFixed(2));
+                              const profit = v === '' ? '' : parseFloat(v);
+                              const cost = typeof formData.costPriceBox === 'number' ? formData.costPriceBox : 0;
+                              const pu = (typeof profit === 'number' && cost > 0) ? parseFloat((cost * (1 + profit / 100)).toFixed(2)) : formData.priceBox;
                               setFormData({ 
                                 ...formData, 
-                                profitMarginPercent: profit,
-                                profitMarginUnitPercent: profit,
+                                profitMarginPercent: profit, 
+                                profitMarginUnitPercent: profit, 
                                 priceBox: pu, 
                                 priceUnit: pu 
                               });
@@ -3074,17 +3098,17 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                             label={`Precio Venta x 1 Ud (${currencySymbol})`} 
                             type="number" 
                             step="0.01" 
-                            value={formData.priceBox?.toString() || ''} 
+                            value={formData.priceBox !== undefined && formData.priceBox !== null ? formData.priceBox.toString() : ''} 
                             onChange={v => {
-                              const pu = parseFloat(v) || 0;
-                              const cost = formData.costPriceBox || 0;
-                              const profit = cost > 0 ? parseFloat((((pu - cost) / cost) * 100).toFixed(1)) : 0;
+                              const pu = v === '' ? '' : parseFloat(v);
+                              const cost = typeof formData.costPriceBox === 'number' ? formData.costPriceBox : 0;
+                              const profit = (typeof pu === 'number' && cost > 0) ? parseFloat((((pu - cost) / cost) * 100).toFixed(1)) : 0;
                               setFormData({ 
                                 ...formData, 
                                 priceBox: pu, 
-                                priceUnit: pu,
-                                profitMarginPercent: profit,
-                                profitMarginUnitPercent: profit
+                                priceUnit: pu, 
+                                profitMarginPercent: profit, 
+                                profitMarginUnitPercent: profit 
                               });
                             }} 
                           />
@@ -3096,29 +3120,29 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                           <InputGroup 
                             label="Stock Actual (Cajas) *" 
                             type="number" 
-                            value={formData.stockBoxes?.toString()} 
+                            value={formData.stockBoxes !== undefined && formData.stockBoxes !== null ? formData.stockBoxes.toString() : ''} 
                             onChange={v => {
-                              const b = parseInt(v) || 0;
-                              const u = formData.unitsPerBox || 1;
-                              setFormData({ ...formData, stockBoxes: b, stockUnits: b * u });
+                              const b = v === '' ? '' : Math.max(0, parseInt(v) || 0);
+                              const u = typeof formData.unitsPerBox === 'number' ? formData.unitsPerBox : 1;
+                              setFormData({ ...formData, stockBoxes: b, stockUnits: typeof b === 'number' ? b * u : '' });
                             }} 
                           />
                           <InputGroup 
                             label="Uds x Caja *" 
                             type="number" 
-                            value={formData.unitsPerBox?.toString()} 
+                            value={formData.unitsPerBox !== undefined && formData.unitsPerBox !== null ? formData.unitsPerBox.toString() : ''} 
                             onChange={v => {
-                              const u = parseInt(v) || 1;
-                              const cost = formData.costPriceBox || 0;
-                              const boxes = formData.stockBoxes || 0;
-                              const newCostUnit = parseFloat((cost / u).toFixed(2));
-                              const pctUnit = formData.profitMarginUnitPercent ?? formData.profitMarginPercent ?? 50;
-                              const newPriceUnit = parseFloat((newCostUnit * (1 + pctUnit / 100)).toFixed(2));
+                              const u = v === '' ? '' : Math.max(1, parseInt(v) || 1);
+                              const cost = typeof formData.costPriceBox === 'number' ? formData.costPriceBox : 0;
+                              const boxes = typeof formData.stockBoxes === 'number' ? formData.stockBoxes : 0;
+                              const newCostUnit = typeof u === 'number' && u > 0 ? parseFloat((cost / u).toFixed(2)) : '';
+                              const pctUnit = typeof formData.profitMarginUnitPercent === 'number' ? formData.profitMarginUnitPercent : (typeof formData.profitMarginPercent === 'number' ? formData.profitMarginPercent : 50);
+                              const newPriceUnit = typeof newCostUnit === 'number' ? parseFloat((newCostUnit * (1 + pctUnit / 100)).toFixed(2)) : '';
                               setFormData({ 
                                 ...formData, 
                                 unitsPerBox: u, 
-                                stockUnits: boxes * u,
-                                costPriceUnit: newCostUnit,
+                                stockUnits: typeof u === 'number' ? boxes * u : '', 
+                                costPriceUnit: newCostUnit, 
                                 priceUnit: newPriceUnit 
                               });
                             }} 
@@ -3126,18 +3150,18 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                           <InputGroup 
                             label="⚠️ Stock Mínimo (Cajas Alarma) *" 
                             type="number" 
-                            value={(formData.minStock ?? 5).toString()} 
+                            value={formData.minStock !== undefined && formData.minStock !== null ? formData.minStock.toString() : ''} 
                             onChange={v => {
-                              const minVal = v === '' ? 0 : Math.max(0, parseInt(v) || 0);
+                              const minVal = v === '' ? '' : Math.max(0, parseInt(v) || 0);
                               setFormData({ ...formData, minStock: minVal });
                             }} 
                           />
                           <InputGroup 
                             label="Stock Máximo (Cajas)" 
                             type="number" 
-                            value={(formData.maxStock ?? 50).toString()} 
+                            value={formData.maxStock !== undefined && formData.maxStock !== null ? formData.maxStock.toString() : ''} 
                             onChange={v => {
-                              const maxVal = v === '' ? 50 : Math.max(1, parseInt(v) || 1);
+                              const maxVal = v === '' ? '' : Math.max(0, parseInt(v) || 0);
                               setFormData({ ...formData, maxStock: maxVal });
                             }} 
                           />
@@ -3148,19 +3172,19 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                             label={`Costo Compra x Caja (${currencySymbol})`} 
                             type="number" 
                             step="0.1" 
-                            value={formData.costPriceBox?.toString() || ''} 
+                            value={formData.costPriceBox !== undefined && formData.costPriceBox !== null ? formData.costPriceBox.toString() : ''} 
                             onChange={v => {
-                              const cost = parseFloat(v) || 0;
-                              const profitBox = formData.profitMarginPercent ?? 50;
-                              const profitUnit = formData.profitMarginUnitPercent ?? profitBox;
-                              const u = formData.unitsPerBox || 1;
-                              const newCostUnit = parseFloat((cost / u).toFixed(2));
-                              const pb = parseFloat((cost * (1 + profitBox / 100)).toFixed(2));
-                              const pu = parseFloat((newCostUnit * (1 + profitUnit / 100)).toFixed(2));
+                              const cost = v === '' ? '' : parseFloat(v);
+                              const profitBox = typeof formData.profitMarginPercent === 'number' ? formData.profitMarginPercent : 50;
+                              const profitUnit = typeof formData.profitMarginUnitPercent === 'number' ? formData.profitMarginUnitPercent : profitBox;
+                              const u = typeof formData.unitsPerBox === 'number' ? formData.unitsPerBox : 1;
+                              const newCostUnit = typeof cost === 'number' ? parseFloat((cost / u).toFixed(2)) : '';
+                              const pb = typeof cost === 'number' ? parseFloat((cost * (1 + profitBox / 100)).toFixed(2)) : '';
+                              const pu = typeof newCostUnit === 'number' ? parseFloat((newCostUnit * (1 + profitUnit / 100)).toFixed(2)) : '';
                               setFormData({ 
                                 ...formData, 
                                 costPriceBox: cost, 
-                                costPriceUnit: newCostUnit,
+                                costPriceUnit: newCostUnit, 
                                 priceBox: pb, 
                                 priceUnit: pu 
                               });
@@ -3170,18 +3194,18 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                             label={`Costo Compra x 1 Ud (${currencySymbol})`} 
                             type="number" 
                             step="0.05" 
-                            value={formData.costPriceUnit?.toString() || ''} 
+                            value={formData.costPriceUnit !== undefined && formData.costPriceUnit !== null ? formData.costPriceUnit.toString() : ''} 
                             onChange={v => {
-                              const costUnit = parseFloat(v) || 0;
-                              const u = formData.unitsPerBox || 1;
-                              const newCostBox = parseFloat((costUnit * u).toFixed(2));
-                              const profitBox = formData.profitMarginPercent ?? 50;
-                              const profitUnit = formData.profitMarginUnitPercent ?? profitBox;
-                              const pb = parseFloat((newCostBox * (1 + profitBox / 100)).toFixed(2));
-                              const pu = parseFloat((costUnit * (1 + profitUnit / 100)).toFixed(2));
+                              const costUnit = v === '' ? '' : parseFloat(v);
+                              const u = typeof formData.unitsPerBox === 'number' ? formData.unitsPerBox : 1;
+                              const newCostBox = typeof costUnit === 'number' ? parseFloat((costUnit * u).toFixed(2)) : '';
+                              const profitBox = typeof formData.profitMarginPercent === 'number' ? formData.profitMarginPercent : 50;
+                              const profitUnit = typeof formData.profitMarginUnitPercent === 'number' ? formData.profitMarginUnitPercent : profitBox;
+                              const pb = typeof newCostBox === 'number' ? parseFloat((newCostBox * (1 + profitBox / 100)).toFixed(2)) : '';
+                              const pu = typeof costUnit === 'number' ? parseFloat((costUnit * (1 + profitUnit / 100)).toFixed(2)) : '';
                               setFormData({ 
                                 ...formData, 
-                                costPriceUnit: costUnit,
+                                costPriceUnit: costUnit, 
                                 costPriceBox: newCostBox, 
                                 priceBox: pb, 
                                 priceUnit: pu 
@@ -3195,15 +3219,15 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                             label="% Ganancia Caja" 
                             type="number" 
                             step="0.5" 
-                            value={formData.profitMarginPercent?.toString() || ''} 
+                            value={formData.profitMarginPercent !== undefined && formData.profitMarginPercent !== null ? formData.profitMarginPercent.toString() : ''} 
                             onChange={v => {
-                              const profit = parseFloat(v) || 0;
-                              const cost = formData.costPriceBox || 0;
-                              const pb = parseFloat((cost * (1 + profit / 100)).toFixed(2));
+                              const profit = v === '' ? '' : parseFloat(v);
+                              const cost = typeof formData.costPriceBox === 'number' ? formData.costPriceBox : 0;
+                              const pb = (typeof profit === 'number' && cost > 0) ? parseFloat((cost * (1 + profit / 100)).toFixed(2)) : formData.priceBox;
                               setFormData({ 
                                 ...formData, 
                                 profitMarginPercent: profit, 
-                                priceBox: pb
+                                priceBox: pb 
                               });
                             }} 
                           />
@@ -3211,15 +3235,15 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                             label={`P. Venta x Caja (${currencySymbol})`} 
                             type="number" 
                             step="0.01" 
-                            value={formData.priceBox?.toString() || ''} 
+                            value={formData.priceBox !== undefined && formData.priceBox !== null ? formData.priceBox.toString() : ''} 
                             onChange={v => {
-                              const pb = parseFloat(v) || 0;
-                              const cost = formData.costPriceBox || 0;
-                              const profit = cost > 0 ? parseFloat((((pb - cost) / cost) * 100).toFixed(1)) : 0;
+                              const pb = v === '' ? '' : parseFloat(v);
+                              const cost = typeof formData.costPriceBox === 'number' ? formData.costPriceBox : 0;
+                              const profit = (typeof pb === 'number' && cost > 0) ? parseFloat((((pb - cost) / cost) * 100).toFixed(1)) : 0;
                               setFormData({ 
                                 ...formData, 
                                 priceBox: pb, 
-                                profitMarginPercent: profit
+                                profitMarginPercent: profit 
                               });
                             }} 
                           />
@@ -3227,12 +3251,12 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                             label="% Ganancia x Ud" 
                             type="number" 
                             step="0.5" 
-                            value={(formData.profitMarginUnitPercent ?? formData.profitMarginPercent)?.toString() || ''} 
+                            value={formData.profitMarginUnitPercent !== undefined && formData.profitMarginUnitPercent !== null ? formData.profitMarginUnitPercent.toString() : (formData.profitMarginPercent !== undefined && formData.profitMarginPercent !== null ? formData.profitMarginPercent.toString() : '')} 
                             onChange={v => {
-                              const profitUnit = parseFloat(v) || 0;
-                              const u = formData.unitsPerBox || 1;
-                              const costUnit = formData.costPriceUnit ?? ((formData.costPriceBox || 0) / u);
-                              const pu = parseFloat((costUnit * (1 + profitUnit / 100)).toFixed(2));
+                              const profitUnit = v === '' ? '' : parseFloat(v);
+                              const u = typeof formData.unitsPerBox === 'number' ? formData.unitsPerBox : 1;
+                              const costUnit = typeof formData.costPriceUnit === 'number' ? formData.costPriceUnit : ((typeof formData.costPriceBox === 'number' ? formData.costPriceBox : 0) / u);
+                              const pu = (typeof profitUnit === 'number' && costUnit > 0) ? parseFloat((costUnit * (1 + profitUnit / 100)).toFixed(2)) : formData.priceUnit;
                               setFormData({ 
                                 ...formData, 
                                 profitMarginUnitPercent: profitUnit, 
@@ -3243,17 +3267,17 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                           <InputGroup 
                             label={`P. Venta x Ud (${currencySymbol})`} 
                             type="number" 
-                            step="0.01"
-                            value={formData.priceUnit?.toString() || ''} 
+                            step="0.01" 
+                            value={formData.priceUnit !== undefined && formData.priceUnit !== null ? formData.priceUnit.toString() : ''} 
                             onChange={v => {
-                              const pu = parseFloat(v) || 0;
-                              const u = formData.unitsPerBox || 1;
-                              const costUnit = formData.costPriceUnit ?? ((formData.costPriceBox || 0) / u);
-                              const profitUnit = costUnit > 0 ? parseFloat((((pu - costUnit) / costUnit) * 100).toFixed(1)) : 0;
+                              const pu = v === '' ? '' : parseFloat(v);
+                              const u = typeof formData.unitsPerBox === 'number' ? formData.unitsPerBox : 1;
+                              const costUnit = typeof formData.costPriceUnit === 'number' ? formData.costPriceUnit : ((typeof formData.costPriceBox === 'number' ? formData.costPriceBox : 0) / u);
+                              const profitUnit = (typeof pu === 'number' && costUnit > 0) ? parseFloat((((pu - costUnit) / costUnit) * 100).toFixed(1)) : 0;
                               setFormData({ 
                                 ...formData, 
-                                priceUnit: pu,
-                                profitMarginUnitPercent: profitUnit
+                                priceUnit: pu, 
+                                profitMarginUnitPercent: profitUnit 
                               });
                             }} 
                           />
@@ -3400,14 +3424,15 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
                   <input
                     type="number"
                     min="1"
-                    value={restockBoxes}
-                    onChange={(e) => setRestockBoxes(parseInt(e.target.value) || 0)}
+                    value={restockBoxes !== undefined && restockBoxes !== null ? restockBoxes : ''}
+                    onChange={(e) => setRestockBoxes(e.target.value === '' ? '' : parseInt(e.target.value))}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="1"
                   />
                   <span className="text-[10px] text-emerald-600 font-bold mt-1 block">
                     {restockByUnit
-                      ? `Se sumarán +${restockBoxes} unidades individuales.`
-                      : `Equivale a +${restockBoxes * restockMed.unitsPerBox} unidades.`}
+                      ? `Se sumarán +${Number(restockBoxes) || 0} unidades individuales.`
+                      : `Equivale a +${(Number(restockBoxes) || 0) * restockMed.unitsPerBox} unidades.`}
                   </span>
                 </div>
 

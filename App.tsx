@@ -218,6 +218,7 @@ const AppContent: React.FC = () => {
                   medications={medications} 
                   customers={customers} 
                   onCompleteSale={handleCompleteSale} 
+                  onVoidSale={handleVoidSale}
                   onAddPatient={handleAddPatient} 
                   currencySymbol={currency.symbol}
                   businessQR={businessQR}

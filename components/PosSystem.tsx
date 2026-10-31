@@ -4,7 +4,8 @@ import {
   Search, ShoppingBag, Plus, Minus, Trash2, CheckCircle2, User, 
   FileText, AlertCircle, ShieldCheck, X, ChevronUp, Printer, 
   CreditCard, DollarSign, QrCode, Activity, Receipt, Store, 
-  FileSpreadsheet, Clock, AlertTriangle, TrendingUp, Percent, Sparkles, Tag
+  FileSpreadsheet, Clock, AlertTriangle, TrendingUp, Percent, Sparkles, Tag,
+  Ban, RotateCcw
 } from 'lucide-react';
 import { Medication, SaleItem, InsurancePlan, PrescriptionData, Customer, SaleRecord, PharmacyInfo, User as UserType } from '@/types';
 import { DEFAULT_DISCOUNT_PLANS } from '@/constants';
@@ -24,6 +25,7 @@ interface PosSystemProps {
     qrVerified?: boolean,
     cashRegisterParam?: 'Caja 1' | 'Caja 2'
   ) => SaleRecord;
+  onVoidSale?: (saleId: string, reason: string) => { success: boolean; message: string };
   onAddPatient: (patient: Customer) => void;
   currencySymbol: string;
   businessQR: string | null;
@@ -39,10 +41,11 @@ const PosSystem: React.FC<PosSystemProps> = ({
   medications, 
   customers, 
   onCompleteSale, 
+  onVoidSale,
   onAddPatient, 
   currencySymbol, 
   businessQR, 
-  pharmacyInfo,
+  pharmacyInfo, 
   currentUser,
   activeCashRegister = 'Caja 1',
   onChangeCashRegister,
@@ -66,6 +69,10 @@ const PosSystem: React.FC<PosSystemProps> = ({
   const [qrPaymentConfirmed, setQrPaymentConfirmed] = useState<boolean>(false);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
+  const [isConfirmVoidPendingSaleOpen, setIsConfirmVoidPendingSaleOpen] = useState(false);
+  const [isConfirmVoidCompletedSaleOpen, setIsConfirmVoidCompletedSaleOpen] = useState(false);
+  const [voidCompletedReason, setVoidCompletedReason] = useState('Cancelación en mostrador / Solicitud del cliente');
+  const [voidNotification, setVoidNotification] = useState<string | null>(null);
   const [prescription, setPrescription] = useState<PrescriptionData>({ doctorLicense: '', patientName: '', date: new Date().toISOString().split('T')[0] });
   const [isCartMobileOpen, setIsCartMobileOpen] = useState(false);
   const [isCustomerSearchOpen, setIsCustomerSearchOpen] = useState(false);
@@ -103,6 +110,31 @@ const PosSystem: React.FC<PosSystemProps> = ({
     } else {
       setCustomDiscountType('PERCENT');
       setCustomDiscountValue(pct);
+    }
+  };
+
+  const handleConfirmVoidPendingSale = () => {
+    setCart([]);
+    setSelectedCustomer(null);
+    setCustomDiscountValue('');
+    setSelectedInsurance(discountPlans[0] || DEFAULT_DISCOUNT_PLANS[0]);
+    setIsCheckoutModalOpen(false);
+    setIsConfirmVoidPendingSaleOpen(false);
+    setErrorMsg(null);
+    setVoidNotification('Venta en curso anulada. Se canceló la transacción y el carrito se limpió.');
+    setTimeout(() => setVoidNotification(null), 4000);
+  };
+
+  const handleConfirmVoidCompletedSale = () => {
+    if (!lastSale || !onVoidSale) return;
+    const res = onVoidSale(lastSale.id, voidCompletedReason);
+    if (res.success) {
+      setLastSale({ ...lastSale, status: 'ANULADA' });
+      setIsConfirmVoidCompletedSaleOpen(false);
+      setVoidNotification(`Factura/Venta #${lastSale.invoiceNumber || lastSale.id} anulada exitosamente. El stock fue revertido al inventario.`);
+      setTimeout(() => setVoidNotification(null), 5000);
+    } else {
+      alert(res.message || 'No se pudo anular la venta.');
     }
   };
 
@@ -568,11 +600,12 @@ const PosSystem: React.FC<PosSystemProps> = ({
             {cart.length > 0 && (
               <button
                 type="button"
-                onClick={() => setCart([])}
-                className="text-[10px] text-slate-400 hover:text-rose-400 transition-colors font-bold px-2 py-0.5 rounded hover:bg-white/10"
-                title="Vaciar todo el carrito"
+                onClick={() => setIsConfirmVoidPendingSaleOpen(true)}
+                className="text-[10px] text-rose-300 hover:text-white bg-rose-950/60 hover:bg-rose-900 border border-rose-800/60 px-2 py-0.5 rounded-lg font-black flex items-center gap-1 transition-all active:scale-95 shadow-sm"
+                title="Paso final para anular esta venta"
               >
-                Vaciar
+                <Ban className="w-3 h-3 text-rose-400" />
+                <span>Anular Venta</span>
               </button>
             )}
             <button onClick={() => setIsCartMobileOpen(false)} className="md:hidden p-1.5 hover:bg-white/10 rounded-full">
@@ -789,6 +822,22 @@ const PosSystem: React.FC<PosSystemProps> = ({
 
         {/* Lista de Items: Flex-1 con min-h garantizado y scroll independiente */}
         <div className="flex-1 min-h-[140px] overflow-y-auto p-2 md:p-2.5 space-y-1.5 overscroll-contain">
+          {voidNotification && (
+            <div className="bg-amber-50 border border-amber-300 text-amber-900 p-2.5 rounded-xl flex items-start gap-2 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
+              <Ban className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="font-extrabold text-[11px] text-amber-950 uppercase tracking-wider">Venta Anulada</p>
+                <p className="text-[11px] font-bold leading-tight mt-0.5">{voidNotification}</p>
+              </div>
+              <button 
+                onClick={() => setVoidNotification(null)} 
+                className="text-amber-400 hover:text-amber-600 p-0.5 rounded"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           {errorMsg && (
             <div className="bg-rose-50 border border-rose-200 text-rose-800 p-2.5 rounded-xl flex items-start gap-2 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
@@ -1233,6 +1282,17 @@ const PosSystem: React.FC<PosSystemProps> = ({
                       : 'Confirmar y Emitir Recibo'}
                     <CheckCircle2 className="w-6 h-6" />
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsConfirmVoidPendingSaleOpen(true)}
+                    className="w-full py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                    title="Paso final para anular esta posible venta"
+                  >
+                    <Ban className="w-4 h-4 text-rose-600" />
+                    <span>Paso Final: Anular / Descartar Venta</span>
+                  </button>
+
                   <p className="text-[10px] text-slate-400 text-center font-bold italic">
                     Al confirmar, se descontará el stock y se generará {documentType === 'FACTURA' ? 'la factura oficial con el nombre de la farmacia' : 'el recibo de venta'}.
                   </p>
@@ -1470,11 +1530,171 @@ const PosSystem: React.FC<PosSystemProps> = ({
                   <span>Imprimir Ticket Térmico (80mm)</span>
                 </button>
 
+                {lastSale?.status === 'ANULADA' ? (
+                  <div className="p-2.5 bg-rose-50 border border-rose-300 rounded-xl text-center space-y-1 animate-in fade-in">
+                    <div className="flex items-center justify-center gap-1.5 text-rose-700 font-black text-xs uppercase tracking-wider">
+                      <Ban className="w-4 h-4 text-rose-600" />
+                      <span>Esta Venta Ha Sido Anulada</span>
+                    </div>
+                    <p className="text-[10px] text-rose-800 font-bold">El stock ha sido devuelto al inventario correctamente.</p>
+                  </div>
+                ) : (
+                  onVoidSale && (
+                    <button 
+                      type="button"
+                      onClick={() => setIsConfirmVoidCompletedSaleOpen(true)}
+                      className="w-full py-2 bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100 font-black rounded-xl transition-all text-xs flex items-center justify-center gap-1.5 active:scale-95"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
+                      <span>Anular esta Factura/Venta recién emitida</span>
+                    </button>
+                  )
+                )}
+
                 <button 
                   onClick={() => setShowSuccess(false)}
                   className="w-full py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-black transition-all text-xs mt-2"
                 >
                   Continuar Nueva Venta
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PASO FINAL: CONFIRMAR ANULACIÓN DE VENTA PENDIENTE / EN CURSO */}
+      {isConfirmVoidPendingSaleOpen && (
+        <div className="fixed inset-0 z-[350] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border border-rose-100 animate-in zoom-in-95 duration-200">
+            <div className="p-4 bg-rose-600 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-rose-700/80 rounded-xl">
+                  <Ban className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black">Paso Final: Anular Venta</h3>
+                  <p className="text-rose-100 text-[10px] font-bold">Confirmación segura antes de descartar</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsConfirmVoidPendingSaleOpen(false)} 
+                className="p-1 hover:bg-white/20 rounded-lg text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl space-y-1">
+                <p className="text-xs font-black text-rose-900">
+                  ¿Estás seguro de que deseas anular esta venta en curso?
+                </p>
+                <p className="text-[11px] text-rose-700 font-medium leading-relaxed">
+                  Esta acción cancelará la transacción, liberará el carrito y no se descontará ningún producto del inventario ni se emitirá factura.
+                </p>
+              </div>
+
+              {/* Resumen de lo que se va a anular */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
+                <div className="flex items-center justify-between text-xs font-black text-slate-700 border-b border-slate-200 pb-2">
+                  <span>Productos en carrito:</span>
+                  <span className="text-rose-600 font-mono">
+                    {cart.reduce((sum, item) => sum + item.quantity, 0)} uds • {currencySymbol}{total.toFixed(2)}
+                  </span>
+                </div>
+                <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1 text-xs">
+                  {cart.map((it, idx) => (
+                    <div key={idx} className="flex justify-between items-center text-slate-600 text-[11px] font-bold">
+                      <span className="truncate pr-2">{it.medication.name}</span>
+                      <span className="text-slate-800 shrink-0 font-mono">{it.quantity} x {currencySymbol}{(it.subtotal / (it.quantity || 1)).toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsConfirmVoidPendingSaleOpen(false)}
+                  className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl text-xs transition-all active:scale-95 text-center"
+                >
+                  Continuar con la Venta
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmVoidPendingSale}
+                  className="py-2.5 px-3 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-xl text-xs transition-all shadow-md shadow-rose-600/30 active:scale-95 flex items-center justify-center gap-1.5 text-center"
+                >
+                  <Ban className="w-4 h-4" />
+                  <span>Sí, Anular Venta</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CONFIRMAR ANULACIÓN DE VENTA RECIÉN EMITIDA */}
+      {isConfirmVoidCompletedSaleOpen && lastSale && (
+        <div className="fixed inset-0 z-[350] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border border-rose-100 animate-in zoom-in-95 duration-200">
+            <div className="p-4 bg-rose-700 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-rose-800 rounded-xl">
+                  <RotateCcw className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black">Anular Factura / Venta Reciente</h3>
+                  <p className="text-rose-200 text-[10px] font-bold">Revertir stock al inventario</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsConfirmVoidCompletedSaleOpen(false)} 
+                className="p-1 hover:bg-white/20 rounded-lg text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl space-y-1">
+                <p className="text-xs font-black text-rose-900">
+                  ¿Confirmas anular la transacción #{lastSale.invoiceNumber || lastSale.id}?
+                </p>
+                <p className="text-[11px] text-rose-700 font-medium leading-relaxed">
+                  Todas las unidades vendidas se devolverán inmediatamente al inventario y el estado pasará a <strong>ANULADA</strong>.
+                </p>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">
+                  Motivo de la Anulación:
+                </label>
+                <input
+                  type="text"
+                  value={voidCompletedReason}
+                  onChange={(e) => setVoidCompletedReason(e.target.value)}
+                  placeholder="Ej: Error de digitación, desistimiento del cliente..."
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-rose-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsConfirmVoidCompletedSaleOpen(false)}
+                  className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl text-xs transition-all active:scale-95 text-center"
+                >
+                  Conservar Venta
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmVoidCompletedSale}
+                  className="py-2.5 px-3 bg-rose-700 hover:bg-rose-800 text-white font-black rounded-xl text-xs transition-all shadow-md shadow-rose-700/30 active:scale-95 flex items-center justify-center gap-1.5 text-center"
+                >
+                  <Ban className="w-4 h-4" />
+                  <span>Confirmar Anulación</span>
                 </button>
               </div>
             </div>
