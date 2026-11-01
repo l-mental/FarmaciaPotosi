@@ -6,8 +6,8 @@ import {
   Lightbulb, Store, DollarSign, QrCode, Filter, Receipt, CheckCircle2,
   Ban, RotateCcw, AlertTriangle, AlertCircle
 } from 'lucide-react';
-import { SaleRecord, PharmacyInfo, User as UserType } from '@/types';
-import { DEFAULT_PHARMACY_INFO } from '@/constants';
+import { SaleRecord, PharmacyInfo, User as UserType, CashRegisterId } from '@/types';
+import { DEFAULT_PHARMACY_INFO, getRegisterBranch, CASH_REGISTERS } from '@/constants';
 import { generateBolivianInvoice, generate5x8Invoice, exportSingleInvoiceToExcel, exportInvoicesDetailedToExcel } from '@/lib/invoiceUtils';
 
 interface ReportsProps {
@@ -19,6 +19,8 @@ interface ReportsProps {
   onVoidSale?: (saleId: string, reason: string) => { success: boolean; message: string };
 }
 
+export type RegisterFilter = 'ALL' | 'Caja 1' | 'Caja 2' | 'Caja 3' | 'Caja 4' | 'SUCURSAL_1' | 'SUCURSAL_2';
+
 const Reports: React.FC<ReportsProps> = ({ 
   sales, 
   currencySymbol, 
@@ -28,7 +30,7 @@ const Reports: React.FC<ReportsProps> = ({
   onVoidSale
 }) => {
   const [filterPatient, setFilterPatient] = useState('');
-  const [selectedRegister, setSelectedRegister] = useState<'ALL' | 'Caja 1' | 'Caja 2'>('ALL');
+  const [selectedRegister, setSelectedRegister] = useState<RegisterFilter>('ALL');
   const [selectedCashier, setSelectedCashier] = useState<string>('ALL');
   const [selectedPayment, setSelectedPayment] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<'ALL' | 'ACTIVE' | 'ANULADA'>('ALL');
@@ -55,7 +57,7 @@ const Reports: React.FC<ReportsProps> = ({
           <ul className="space-y-3 text-xs text-slate-600 font-bold">
             <li className="flex items-center gap-2">
               <span className="w-1.5 h-1.5 bg-rose-500 rounded-full shrink-0" />
-              <span>Arqueo y Cierre comparativo de Caja 1 vs Caja 2</span>
+              <span>Arqueo y Cierre comparativo de Cajas (1, 2, 3 y 4) por Sucursal</span>
             </li>
             <li className="flex items-center gap-2">
               <span className="w-1.5 h-1.5 bg-rose-500 rounded-full shrink-0" />
@@ -76,7 +78,6 @@ const Reports: React.FC<ReportsProps> = ({
     );
   }
 
-  // Multi-criteria filtering: Register, Cashier, Payment, Search
   // Multi-criteria filtering: Register, Cashier, Payment, Status, Search
   const filteredSales = sales.filter(sale => {
     // Filter by Status
@@ -85,7 +86,11 @@ const Reports: React.FC<ReportsProps> = ({
 
     // Filter by Register
     const saleRegister = sale.cashRegister || 'Caja 1';
-    if (selectedRegister !== 'ALL' && saleRegister !== selectedRegister) {
+    if (selectedRegister === 'SUCURSAL_1') {
+      if (saleRegister !== 'Caja 1' && saleRegister !== 'Caja 2') return false;
+    } else if (selectedRegister === 'SUCURSAL_2') {
+      if (saleRegister !== 'Caja 3' && saleRegister !== 'Caja 4') return false;
+    } else if (selectedRegister !== 'ALL' && saleRegister !== selectedRegister) {
       return false;
     }
 
@@ -118,27 +123,35 @@ const Reports: React.FC<ReportsProps> = ({
   const totalRevenue = activeFilteredSales.reduce((sum, s) => sum + s.total, 0);
   const totalVoidedRevenue = voidedFilteredSales.reduce((sum, s) => sum + s.total, 0);
 
-  // Caja 1 Metrics (Active only)
-  const caja1Sales = sales.filter(s => (s.cashRegister || 'Caja 1') === 'Caja 1' && s.status !== 'ANULADA');
-  const caja1Total = caja1Sales.reduce((sum, s) => sum + s.total, 0);
-  const caja1Cash = caja1Sales.filter(s => s.paymentMethod === 'CASH').reduce((sum, s) => sum + s.total, 0);
-  const caja1QR = caja1Sales.filter(s => s.paymentMethod === 'QR').reduce((sum, s) => sum + s.total, 0);
-  const caja1Card = caja1Sales.filter(s => s.paymentMethod === 'CARD').reduce((sum, s) => sum + s.total, 0);
-  const caja1Cashiers = Array.from(new Set(sales.filter(s => (s.cashRegister || 'Caja 1') === 'Caja 1').map(s => s.cashierName || s.userId).filter(Boolean)));
+  // Helper function to calculate register metrics
+  const getRegisterMetrics = (regId: CashRegisterId) => {
+    const regSales = sales.filter(s => (s.cashRegister || 'Caja 1') === regId && s.status !== 'ANULADA');
+    const total = regSales.reduce((sum, s) => sum + s.total, 0);
+    const cash = regSales.filter(s => s.paymentMethod === 'CASH').reduce((sum, s) => sum + s.total, 0);
+    const qr = regSales.filter(s => s.paymentMethod === 'QR').reduce((sum, s) => sum + s.total, 0);
+    const card = regSales.filter(s => s.paymentMethod === 'CARD').reduce((sum, s) => sum + s.total, 0);
+    const cashiers = Array.from(new Set(sales.filter(s => (s.cashRegister || 'Caja 1') === regId).map(s => s.cashierName || s.userId).filter(Boolean)));
+    return { sales: regSales, total, cash, qr, card, cashiers };
+  };
 
-  // Caja 2 Metrics (Active only)
-  const caja2Sales = sales.filter(s => s.cashRegister === 'Caja 2' && s.status !== 'ANULADA');
-  const caja2Total = caja2Sales.reduce((sum, s) => sum + s.total, 0);
-  const caja2Cash = caja2Sales.filter(s => s.paymentMethod === 'CASH').reduce((sum, s) => sum + s.total, 0);
-  const caja2QR = caja2Sales.filter(s => s.paymentMethod === 'QR').reduce((sum, s) => sum + s.total, 0);
-  const caja2Card = caja2Sales.filter(s => s.paymentMethod === 'CARD').reduce((sum, s) => sum + s.total, 0);
-  const caja2Cashiers = Array.from(new Set(sales.filter(s => s.cashRegister === 'Caja 2').map(s => s.cashierName || s.userId).filter(Boolean)));
+  const reg1 = getRegisterMetrics('Caja 1');
+  const reg2 = getRegisterMetrics('Caja 2');
+  const reg3 = getRegisterMetrics('Caja 3');
+  const reg4 = getRegisterMetrics('Caja 4');
+
+  // Totales por Sucursal
+  const sucursal1SalesCount = reg1.sales.length + reg2.sales.length;
+  const sucursal1Total = reg1.total + reg2.total;
+  const sucursal2SalesCount = reg3.sales.length + reg4.sales.length;
+  const sucursal2Total = reg3.total + reg4.total;
 
   // Unique Cashiers for filter
   const allCashiers = Array.from(new Set(sales.map(s => s.cashierName || s.userId).filter(Boolean)));
 
   const handleExportAllToExcel = () => {
-    const filterTag = selectedRegister === 'ALL' ? 'General_Caja1_y_Caja2' : selectedRegister.replace(/\s+/g, '_');
+    const filterTag = selectedRegister === 'ALL' 
+      ? 'General_Todas_las_Cajas' 
+      : selectedRegister.replace(/\s+/g, '_');
     exportInvoicesDetailedToExcel(filteredSales, pharmacyInfo, filterTag);
   };
 
@@ -191,106 +204,273 @@ const Reports: React.FC<ReportsProps> = ({
         </div>
       </div>
 
-      {/* Caja 1 and Caja 2 Breakdown Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-        {/* Caja 1 Card */}
-        <div className={`p-5 md:p-6 rounded-2xl border-2 transition-all relative overflow-hidden bg-white ${selectedRegister === 'Caja 1' ? 'border-emerald-500 shadow-md ring-4 ring-emerald-500/10' : 'border-slate-200/90 shadow-sm'}`}>
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl">
-                <Store className="w-5 h-5" />
-              </div>
-              <div>
-                <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Punto de Cobro #1</span>
-                <h3 className="text-lg font-black text-slate-900">Caja 1</h3>
-              </div>
+      {/* Cajas 1, 2, 3 y 4 Divididas por Sucursal */}
+      <div className="space-y-6">
+        
+        {/* SUCURSAL 1 (Central / Principal) */}
+        <div className="space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-xs" />
+              <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">
+                Sucursal Central (Principal)
+              </h3>
+              <span className="text-[10px] font-black text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
+                Cajas 1 y 2
+              </span>
             </div>
-            <button
-              onClick={() => setSelectedRegister(selectedRegister === 'Caja 1' ? 'ALL' : 'Caja 1')}
-              className={`px-3 py-1 rounded-xl text-xs font-black uppercase tracking-wider transition-colors ${selectedRegister === 'Caja 1' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-            >
-              {selectedRegister === 'Caja 1' ? 'Filtrando Caja 1' : 'Filtrar Caja 1'}
-            </button>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-500">
+                Total Facturado: <strong className="text-slate-900 font-mono">{currencySymbol}{sucursal1Total.toFixed(2)}</strong> ({sucursal1SalesCount} ventas)
+              </span>
+              <button
+                onClick={() => setSelectedRegister(selectedRegister === 'SUCURSAL_1' ? 'ALL' : 'SUCURSAL_1')}
+                className={`px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
+                  selectedRegister === 'SUCURSAL_1' 
+                    ? 'bg-slate-900 text-white shadow-sm' 
+                    : 'bg-slate-200/80 hover:bg-slate-300 text-slate-700'
+                }`}
+              >
+                {selectedRegister === 'SUCURSAL_1' ? 'Filtrando Sucursal 1' : 'Filtrar Sucursal 1'}
+              </button>
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-0.5">Total Facturado</span>
-              <span className="text-xl md:text-2xl font-black text-slate-900">{currencySymbol}{caja1Total.toFixed(2)}</span>
-            </div>
-            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-0.5">Ventas Realizadas</span>
-              <span className="text-xl md:text-2xl font-black text-emerald-700">{caja1Sales.length} trans.</span>
-            </div>
-          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+            {/* Caja 1 Card */}
+            <div className={`p-5 md:p-6 rounded-2xl border-2 transition-all relative overflow-hidden bg-white ${selectedRegister === 'Caja 1' ? 'border-emerald-500 shadow-md ring-4 ring-emerald-500/10' : 'border-slate-200/90 shadow-sm'}`}>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl">
+                    <Store className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Punto de Cobro #1</span>
+                    <h3 className="text-lg font-black text-slate-900">Caja 1</h3>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedRegister(selectedRegister === 'Caja 1' ? 'ALL' : 'Caja 1')}
+                  className={`px-3 py-1 rounded-xl text-xs font-black uppercase tracking-wider transition-colors ${selectedRegister === 'Caja 1' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                >
+                  {selectedRegister === 'Caja 1' ? 'Filtrando Caja 1' : 'Filtrar Caja 1'}
+                </button>
+              </div>
 
-          <div className="space-y-1.5 pt-2 border-t border-slate-100 text-xs">
-            <div className="flex justify-between items-center text-slate-500">
-              <span className="font-semibold flex items-center gap-1"><DollarSign className="w-3.5 h-3.5 text-emerald-600" /> Efectivo:</span>
-              <span className="font-bold text-slate-800">{currencySymbol}{caja1Cash.toFixed(2)}</span>
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-0.5">Total Facturado</span>
+                  <span className="text-xl md:text-2xl font-black text-slate-900">{currencySymbol}{reg1.total.toFixed(2)}</span>
+                </div>
+                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-0.5">Ventas Realizadas</span>
+                  <span className="text-xl md:text-2xl font-black text-emerald-700">{reg1.sales.length} trans.</span>
+                </div>
+              </div>
+
+              <div className="space-y-1.5 pt-2 border-t border-slate-100 text-xs">
+                <div className="flex justify-between items-center text-slate-500">
+                  <span className="font-semibold flex items-center gap-1"><DollarSign className="w-3.5 h-3.5 text-emerald-600" /> Efectivo:</span>
+                  <span className="font-bold text-slate-800">{currencySymbol}{reg1.cash.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center text-slate-500">
+                  <span className="font-semibold flex items-center gap-1"><QrCode className="w-3.5 h-3.5 text-blue-600" /> Pago QR:</span>
+                  <span className="font-bold text-slate-800">{currencySymbol}{reg1.qr.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center text-slate-500">
+                  <span className="font-semibold flex items-center gap-1"><CreditCard className="w-3.5 h-3.5 text-purple-600" /> Tarjeta:</span>
+                  <span className="font-bold text-slate-800">{currencySymbol}{reg1.card.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center text-slate-400 text-[10px] pt-1">
+                  <span className="font-bold uppercase tracking-wider">Cajeros / Usuarios:</span>
+                  <span className="font-bold text-slate-700 truncate max-w-[180px]">{reg1.cashiers.join(', ') || 'N/A'}</span>
+                </div>
+              </div>
             </div>
-            <div className="flex justify-between items-center text-slate-500">
-              <span className="font-semibold flex items-center gap-1"><QrCode className="w-3.5 h-3.5 text-blue-600" /> Pago QR:</span>
-              <span className="font-bold text-slate-800">{currencySymbol}{caja1QR.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between items-center text-slate-500">
-              <span className="font-semibold flex items-center gap-1"><CreditCard className="w-3.5 h-3.5 text-purple-600" /> Tarjeta:</span>
-              <span className="font-bold text-slate-800">{currencySymbol}{caja1Card.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between items-center text-slate-400 text-[10px] pt-1">
-              <span className="font-bold uppercase tracking-wider">Cajeros / Usuarios:</span>
-              <span className="font-bold text-slate-700 truncate max-w-[180px]">{caja1Cashiers.join(', ') || 'N/A'}</span>
+
+            {/* Caja 2 Card */}
+            <div className={`p-5 md:p-6 rounded-2xl border-2 transition-all relative overflow-hidden bg-white ${selectedRegister === 'Caja 2' ? 'border-blue-500 shadow-md ring-4 ring-blue-500/10' : 'border-slate-200/90 shadow-sm'}`}>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl">
+                    <Store className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Punto de Cobro #2</span>
+                    <h3 className="text-lg font-black text-slate-900">Caja 2</h3>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedRegister(selectedRegister === 'Caja 2' ? 'ALL' : 'Caja 2')}
+                  className={`px-3 py-1 rounded-xl text-xs font-black uppercase tracking-wider transition-colors ${selectedRegister === 'Caja 2' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                >
+                  {selectedRegister === 'Caja 2' ? 'Filtrando Caja 2' : 'Filtrar Caja 2'}
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-0.5">Total Facturado</span>
+                  <span className="text-xl md:text-2xl font-black text-slate-900">{currencySymbol}{reg2.total.toFixed(2)}</span>
+                </div>
+                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-0.5">Ventas Realizadas</span>
+                  <span className="text-xl md:text-2xl font-black text-blue-700">{reg2.sales.length} trans.</span>
+                </div>
+              </div>
+
+              <div className="space-y-1.5 pt-2 border-t border-slate-100 text-xs">
+                <div className="flex justify-between items-center text-slate-500">
+                  <span className="font-semibold flex items-center gap-1"><DollarSign className="w-3.5 h-3.5 text-emerald-600" /> Efectivo:</span>
+                  <span className="font-bold text-slate-800">{currencySymbol}{reg2.cash.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center text-slate-500">
+                  <span className="font-semibold flex items-center gap-1"><QrCode className="w-3.5 h-3.5 text-blue-600" /> Pago QR:</span>
+                  <span className="font-bold text-slate-800">{currencySymbol}{reg2.qr.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center text-slate-500">
+                  <span className="font-semibold flex items-center gap-1"><CreditCard className="w-3.5 h-3.5 text-purple-600" /> Tarjeta:</span>
+                  <span className="font-bold text-slate-800">{currencySymbol}{reg2.card.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center text-slate-400 text-[10px] pt-1">
+                  <span className="font-bold uppercase tracking-wider">Cajeros / Usuarios:</span>
+                  <span className="font-bold text-slate-700 truncate max-w-[180px]">{reg2.cashiers.join(', ') || 'N/A'}</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Caja 2 Card */}
-        <div className={`p-5 md:p-6 rounded-2xl border-2 transition-all relative overflow-hidden bg-white ${selectedRegister === 'Caja 2' ? 'border-emerald-500 shadow-md ring-4 ring-emerald-500/10' : 'border-slate-200/90 shadow-sm'}`}>
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl">
-                <Store className="w-5 h-5" />
-              </div>
-              <div>
-                <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Punto de Cobro #2</span>
-                <h3 className="text-lg font-black text-slate-900">Caja 2</h3>
-              </div>
+        {/* SUCURSAL 2 (Norte) */}
+        <div className="space-y-3 pt-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-purple-500 shadow-xs" />
+              <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">
+                Sucursal 2 (Norte)
+              </h3>
+              <span className="text-[10px] font-black text-purple-800 bg-purple-100 px-2 py-0.5 rounded-full">
+                Cajas 3 y 4
+              </span>
             </div>
-            <button
-              onClick={() => setSelectedRegister(selectedRegister === 'Caja 2' ? 'ALL' : 'Caja 2')}
-              className={`px-3 py-1 rounded-xl text-xs font-black uppercase tracking-wider transition-colors ${selectedRegister === 'Caja 2' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-            >
-              {selectedRegister === 'Caja 2' ? 'Filtrando Caja 2' : 'Filtrar Caja 2'}
-            </button>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-0.5">Total Facturado</span>
-              <span className="text-xl md:text-2xl font-black text-slate-900">{currencySymbol}{caja2Total.toFixed(2)}</span>
-            </div>
-            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-0.5">Ventas Realizadas</span>
-              <span className="text-xl md:text-2xl font-black text-blue-700">{caja2Sales.length} trans.</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-500">
+                Total Facturado: <strong className="text-slate-900 font-mono">{currencySymbol}{sucursal2Total.toFixed(2)}</strong> ({sucursal2SalesCount} ventas)
+              </span>
+              <button
+                onClick={() => setSelectedRegister(selectedRegister === 'SUCURSAL_2' ? 'ALL' : 'SUCURSAL_2')}
+                className={`px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
+                  selectedRegister === 'SUCURSAL_2' 
+                    ? 'bg-slate-900 text-white shadow-sm' 
+                    : 'bg-slate-200/80 hover:bg-slate-300 text-slate-700'
+                }`}
+              >
+                {selectedRegister === 'SUCURSAL_2' ? 'Filtrando Sucursal 2' : 'Filtrar Sucursal 2'}
+              </button>
             </div>
           </div>
 
-          <div className="space-y-1.5 pt-2 border-t border-slate-100 text-xs">
-            <div className="flex justify-between items-center text-slate-500">
-              <span className="font-semibold flex items-center gap-1"><DollarSign className="w-3.5 h-3.5 text-emerald-600" /> Efectivo:</span>
-              <span className="font-bold text-slate-800">{currencySymbol}{caja2Cash.toFixed(2)}</span>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+            {/* Caja 3 Card */}
+            <div className={`p-5 md:p-6 rounded-2xl border-2 transition-all relative overflow-hidden bg-white ${selectedRegister === 'Caja 3' ? 'border-purple-500 shadow-md ring-4 ring-purple-500/10' : 'border-slate-200/90 shadow-sm'}`}>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-purple-50 text-purple-600 rounded-xl">
+                    <Store className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-black text-purple-600 uppercase tracking-widest">Punto de Cobro #3</span>
+                    <h3 className="text-lg font-black text-slate-900">Caja 3</h3>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedRegister(selectedRegister === 'Caja 3' ? 'ALL' : 'Caja 3')}
+                  className={`px-3 py-1 rounded-xl text-xs font-black uppercase tracking-wider transition-colors ${selectedRegister === 'Caja 3' ? 'bg-purple-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                >
+                  {selectedRegister === 'Caja 3' ? 'Filtrando Caja 3' : 'Filtrar Caja 3'}
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-0.5">Total Facturado</span>
+                  <span className="text-xl md:text-2xl font-black text-slate-900">{currencySymbol}{reg3.total.toFixed(2)}</span>
+                </div>
+                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-0.5">Ventas Realizadas</span>
+                  <span className="text-xl md:text-2xl font-black text-purple-700">{reg3.sales.length} trans.</span>
+                </div>
+              </div>
+
+              <div className="space-y-1.5 pt-2 border-t border-slate-100 text-xs">
+                <div className="flex justify-between items-center text-slate-500">
+                  <span className="font-semibold flex items-center gap-1"><DollarSign className="w-3.5 h-3.5 text-emerald-600" /> Efectivo:</span>
+                  <span className="font-bold text-slate-800">{currencySymbol}{reg3.cash.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center text-slate-500">
+                  <span className="font-semibold flex items-center gap-1"><QrCode className="w-3.5 h-3.5 text-blue-600" /> Pago QR:</span>
+                  <span className="font-bold text-slate-800">{currencySymbol}{reg3.qr.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center text-slate-500">
+                  <span className="font-semibold flex items-center gap-1"><CreditCard className="w-3.5 h-3.5 text-purple-600" /> Tarjeta:</span>
+                  <span className="font-bold text-slate-800">{currencySymbol}{reg3.card.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center text-slate-400 text-[10px] pt-1">
+                  <span className="font-bold uppercase tracking-wider">Cajeros / Usuarios:</span>
+                  <span className="font-bold text-slate-700 truncate max-w-[180px]">{reg3.cashiers.join(', ') || 'N/A'}</span>
+                </div>
+              </div>
             </div>
-            <div className="flex justify-between items-center text-slate-500">
-              <span className="font-semibold flex items-center gap-1"><QrCode className="w-3.5 h-3.5 text-blue-600" /> Pago QR:</span>
-              <span className="font-bold text-slate-800">{currencySymbol}{caja2QR.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between items-center text-slate-500">
-              <span className="font-semibold flex items-center gap-1"><CreditCard className="w-3.5 h-3.5 text-purple-600" /> Tarjeta:</span>
-              <span className="font-bold text-slate-800">{currencySymbol}{caja2Card.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between items-center text-slate-400 text-[10px] pt-1">
-              <span className="font-bold uppercase tracking-wider">Cajeros / Usuarios:</span>
-              <span className="font-bold text-slate-700 truncate max-w-[180px]">{caja2Cashiers.join(', ') || 'N/A'}</span>
+
+            {/* Caja 4 Card */}
+            <div className={`p-5 md:p-6 rounded-2xl border-2 transition-all relative overflow-hidden bg-white ${selectedRegister === 'Caja 4' ? 'border-amber-500 shadow-md ring-4 ring-amber-500/10' : 'border-slate-200/90 shadow-sm'}`}>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-amber-50 text-amber-600 rounded-xl">
+                    <Store className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Punto de Cobro #4</span>
+                    <h3 className="text-lg font-black text-slate-900">Caja 4</h3>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedRegister(selectedRegister === 'Caja 4' ? 'ALL' : 'Caja 4')}
+                  className={`px-3 py-1 rounded-xl text-xs font-black uppercase tracking-wider transition-colors ${selectedRegister === 'Caja 4' ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                >
+                  {selectedRegister === 'Caja 4' ? 'Filtrando Caja 4' : 'Filtrar Caja 4'}
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-0.5">Total Facturado</span>
+                  <span className="text-xl md:text-2xl font-black text-slate-900">{currencySymbol}{reg4.total.toFixed(2)}</span>
+                </div>
+                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-0.5">Ventas Realizadas</span>
+                  <span className="text-xl md:text-2xl font-black text-amber-700">{reg4.sales.length} trans.</span>
+                </div>
+              </div>
+
+              <div className="space-y-1.5 pt-2 border-t border-slate-100 text-xs">
+                <div className="flex justify-between items-center text-slate-500">
+                  <span className="font-semibold flex items-center gap-1"><DollarSign className="w-3.5 h-3.5 text-emerald-600" /> Efectivo:</span>
+                  <span className="font-bold text-slate-800">{currencySymbol}{reg4.cash.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center text-slate-500">
+                  <span className="font-semibold flex items-center gap-1"><QrCode className="w-3.5 h-3.5 text-blue-600" /> Pago QR:</span>
+                  <span className="font-bold text-slate-800">{currencySymbol}{reg4.qr.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center text-slate-500">
+                  <span className="font-semibold flex items-center gap-1"><CreditCard className="w-3.5 h-3.5 text-purple-600" /> Tarjeta:</span>
+                  <span className="font-bold text-slate-800">{currencySymbol}{reg4.card.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center text-slate-400 text-[10px] pt-1">
+                  <span className="font-bold uppercase tracking-wider">Cajeros / Usuarios:</span>
+                  <span className="font-bold text-slate-700 truncate max-w-[180px]">{reg4.cashiers.join(', ') || 'N/A'}</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -307,30 +487,65 @@ const Reports: React.FC<ReportsProps> = ({
                 Historial de Facturas y Ventas Realizadas
               </h3>
               <p className="text-xs text-slate-400 font-semibold mt-0.5">
-                Mostrando {filteredSales.length} comprobantes emitidos por {selectedRegister === 'ALL' ? 'Caja 1 y Caja 2' : selectedRegister}
+                Mostrando {filteredSales.length} comprobantes {
+                  selectedRegister === 'ALL' ? 'de todas las cajas y sucursales' : 
+                  selectedRegister === 'SUCURSAL_1' ? 'de Sucursal Central (Cajas 1 y 2)' :
+                  selectedRegister === 'SUCURSAL_2' ? 'de Sucursal 2 (Cajas 3 y 4)' :
+                  `emitidos por ${selectedRegister} (${getRegisterBranch(selectedRegister)})`
+                }
               </p>
             </div>
 
             {/* Register and Status Toggle Pills */}
             <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
+              <div className="flex flex-wrap items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
                 <button
                   onClick={() => setSelectedRegister('ALL')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${selectedRegister === 'ALL' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:text-slate-900'}`}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-black transition-all ${selectedRegister === 'ALL' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:text-slate-900'}`}
                 >
-                  Todas las Cajas ({sales.length})
+                  Todas ({sales.length})
+                </button>
+
+                <button
+                  onClick={() => setSelectedRegister('SUCURSAL_1')}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-black transition-all ${selectedRegister === 'SUCURSAL_1' ? 'bg-emerald-700 text-white' : 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'}`}
+                  title="Filtrar Cajas 1 y 2"
+                >
+                  Sucursal 1 ({sucursal1SalesCount})
                 </button>
                 <button
                   onClick={() => setSelectedRegister('Caja 1')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${selectedRegister === 'Caja 1' ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:text-slate-900'}`}
+                  className={`px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${selectedRegister === 'Caja 1' ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:text-slate-900'}`}
                 >
-                  Caja 1 ({caja1Sales.length})
+                  Caja 1 ({reg1.sales.length})
                 </button>
                 <button
                   onClick={() => setSelectedRegister('Caja 2')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${selectedRegister === 'Caja 2' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:text-slate-900'}`}
+                  className={`px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${selectedRegister === 'Caja 2' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:text-slate-900'}`}
                 >
-                  Caja 2 ({caja2Sales.length})
+                  Caja 2 ({reg2.sales.length})
+                </button>
+
+                <span className="w-px h-4 bg-slate-300 mx-0.5" />
+
+                <button
+                  onClick={() => setSelectedRegister('SUCURSAL_2')}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-black transition-all ${selectedRegister === 'SUCURSAL_2' ? 'bg-purple-700 text-white' : 'text-purple-700 bg-purple-50 hover:bg-purple-100'}`}
+                  title="Filtrar Cajas 3 y 4"
+                >
+                  Sucursal 2 ({sucursal2SalesCount})
+                </button>
+                <button
+                  onClick={() => setSelectedRegister('Caja 3')}
+                  className={`px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${selectedRegister === 'Caja 3' ? 'bg-purple-600 text-white' : 'text-slate-600 hover:text-slate-900'}`}
+                >
+                  Caja 3 ({reg3.sales.length})
+                </button>
+                <button
+                  onClick={() => setSelectedRegister('Caja 4')}
+                  className={`px-2 py-1.5 rounded-lg text-xs font-bold transition-all ${selectedRegister === 'Caja 4' ? 'bg-amber-600 text-white' : 'text-slate-600 hover:text-slate-900'}`}
+                >
+                  Caja 4 ({reg4.sales.length})
                 </button>
               </div>
 
@@ -479,9 +694,19 @@ const Reports: React.FC<ReportsProps> = ({
                         )}
                       </td>
                       <td className="px-4 py-3.5">
-                        <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider ${isCaja1 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}`}>
-                          {caja}
-                        </span>
+                        <div className="flex flex-col">
+                          <span className={`inline-block px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider w-fit ${
+                            caja === 'Caja 1' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                            caja === 'Caja 2' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+                            caja === 'Caja 3' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
+                            'bg-amber-50 text-amber-700 border border-amber-200'
+                          }`}>
+                            {caja}
+                          </span>
+                          <span className="text-[8px] font-bold text-slate-400 mt-0.5">
+                            {getRegisterBranch(caja).split('(')[0].trim()}
+                          </span>
+                        </div>
                       </td>
                       <td className="px-4 py-3.5 font-bold text-slate-800">
                         {sale.cashierName || sale.userId}

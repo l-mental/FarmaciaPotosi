@@ -1,4 +1,4 @@
-import { Medication, Category, InsurancePlan, Customer, SaleRecord, Currency, User, Supplier, Purchase, PharmacyInfo } from './types';
+import { Medication, Category, InsurancePlan, Customer, SaleRecord, Currency, User, Supplier, Purchase, PharmacyInfo, CashRegisterId } from './types';
 
 export const DEFAULT_PHARMACY_INFO: PharmacyInfo = {
   name: 'FARMA',
@@ -75,3 +75,26 @@ export const DEFAULT_BRANCHES: string[] = [
   'Sucursal 2 (Norte)',
   'Sucursal 3 (Sur)'
 ];
+
+export interface CashRegisterInfo {
+  id: CashRegisterId;
+  name: string;
+  number: number;
+  branch: string;
+  branchShort: string;
+  color: 'emerald' | 'blue' | 'purple' | 'amber';
+}
+
+export const CASH_REGISTERS: CashRegisterInfo[] = [
+  { id: 'Caja 1', name: 'Caja 1', number: 1, branch: 'Sucursal Central (Principal)', branchShort: 'Sucursal 1 (Central)', color: 'emerald' },
+  { id: 'Caja 2', name: 'Caja 2', number: 2, branch: 'Sucursal Central (Principal)', branchShort: 'Sucursal 1 (Central)', color: 'blue' },
+  { id: 'Caja 3', name: 'Caja 3', number: 3, branch: 'Sucursal 2 (Norte)', branchShort: 'Sucursal 2 (Norte)', color: 'purple' },
+  { id: 'Caja 4', name: 'Caja 4', number: 4, branch: 'Sucursal 2 (Norte)', branchShort: 'Sucursal 2 (Norte)', color: 'amber' },
+];
+
+export const getRegisterBranch = (registerId?: string): string => {
+  if (registerId === 'Caja 3' || registerId === 'Caja 4') {
+    return 'Sucursal 2 (Norte)';
+  }
+  return 'Sucursal Central (Principal)';
+};

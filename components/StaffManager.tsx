@@ -5,7 +5,8 @@ import {
   LayoutDashboard, ShoppingCart, Pill, BarChart3, Truck, ShoppingBag, 
   UserCog, Store, KeyRound, Sparkles
 } from 'lucide-react';
-import { User, UserRole, AppSection, UserPermissions, DEFAULT_ROLE_PERMISSIONS } from '@/types';
+import { User, UserRole, AppSection, UserPermissions, DEFAULT_ROLE_PERMISSIONS, CashRegisterId } from '@/types';
+import { getRegisterBranch } from '@/constants';
 import { pushCollectionToSupabase } from '@/services/supabaseService';
 import { broadcastSyncEvent } from '@/services/autoSyncService';
 
@@ -298,8 +299,8 @@ const StaffManager: React.FC<StaffManagerProps> = ({
                   <h3 className="text-sm font-black text-slate-800 truncate">{member.name}</h3>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-[11px] text-slate-400 font-bold">@{member.username}</span>
-                    <span className="text-[10px] text-indigo-600 bg-indigo-50 px-2 py-0.2 rounded-full font-bold">
-                      {member.assignedRegister || 'Caja 1'}
+                    <span className="text-[10px] text-indigo-700 bg-indigo-50 border border-indigo-150 px-2 py-0.5 rounded-full font-bold">
+                      {member.assignedRegister || 'Caja 1'} • {getRegisterBranch(member.assignedRegister).split('(')[0].trim()}
                     </span>
                   </div>
                   {member.phone && (
@@ -450,18 +451,6 @@ const StaffManager: React.FC<StaffManagerProps> = ({
                   </div>
 
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Caja Asignada</label>
-                    <select
-                      value={formData.assignedRegister || 'Caja 1'}
-                      onChange={e => setFormData({...formData, assignedRegister: e.target.value as 'Caja 1' | 'Caja 2'})}
-                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none text-xs font-bold text-slate-800"
-                    >
-                      <option value="Caja 1">Caja 1</option>
-                      <option value="Caja 2">Caja 2</option>
-                    </select>
-                  </div>
-
-                  <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Celular / Teléfono</label>
                     <input 
                       type="tel" 
@@ -481,6 +470,22 @@ const StaffManager: React.FC<StaffManagerProps> = ({
                       onChange={e => setFormData({...formData, email: e.target.value})}
                       className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-bold text-slate-800"
                     />
+                  </div>
+
+                  <div className="flex flex-col gap-1 sm:col-span-2">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">
+                      Caja y Sucursal Asignada
+                    </label>
+                    <select
+                      value={formData.assignedRegister || 'Caja 1'}
+                      onChange={e => setFormData({ ...formData, assignedRegister: e.target.value as CashRegisterId })}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-bold text-slate-800 cursor-pointer"
+                    >
+                      <option value="Caja 1">Caja 1 — Sucursal Central (Principal)</option>
+                      <option value="Caja 2">Caja 2 — Sucursal Central (Principal)</option>
+                      <option value="Caja 3">Caja 3 — Sucursal 2 (Norte)</option>
+                      <option value="Caja 4">Caja 4 — Sucursal 2 (Norte)</option>
+                    </select>
                   </div>
                 </div>
               </div>

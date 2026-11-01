@@ -5,10 +5,11 @@ import {
   Bell, AlertOctagon, Clock, X, ChevronRight, Volume2, Vibrate, 
   Smartphone, Monitor, Sparkles, Check, Printer, Cloud
 } from 'lucide-react';
-import { Currency, Medication, UserRole, PharmacyInfo } from '@/types';
+import { Currency, Medication, UserRole, PharmacyInfo, SaleRecord } from '@/types';
 import { NotificationSettings } from '@/services/notificationService';
 import { useNavigate } from 'react-router-dom';
 import { printCriticalInventoryReport } from '@/lib/printAlertsReport';
+import { SalesPulseWidget } from '@/components/widgets/SalesPulseWidget';
 
 interface AppHeaderProps {
   activeTab: string;
@@ -23,6 +24,7 @@ interface AppHeaderProps {
   onSwitchRole: (role: UserRole) => void;
   medications?: Medication[];
   pharmacyInfo?: PharmacyInfo;
+  sales?: SaleRecord[];
   notificationSettings?: NotificationSettings;
   onUpdateNotificationSettings?: (settings: Partial<NotificationSettings>) => void;
   onTriggerTestAlert?: () => void;
@@ -57,6 +59,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   onSwitchRole,
   medications = [],
   pharmacyInfo,
+  sales = [],
   notificationSettings,
   onUpdateNotificationSettings,
   onTriggerTestAlert,
@@ -111,7 +114,18 @@ const AppHeader: React.FC<AppHeaderProps> = ({
           <h2 className="text-sm md:text-base font-bold text-slate-800 tracking-tight">{displayTab}</h2>
         </div>
       </div>
-      <div className="flex items-center gap-2 sm:gap-3 md:gap-4">
+
+      {/* Widget Central de Ventas: Ventas: Día / Ver Más ↗ (Ubicado al centro, entre Farma SoftPlus y la alarma) */}
+      <div className="flex-1 flex justify-center items-center px-2 md:px-4 min-w-0">
+        <SalesPulseWidget
+          sales={sales}
+          currencySymbol={currency.symbol}
+          pharmacyInfo={pharmacyInfo}
+          inHeader={true}
+        />
+      </div>
+
+      <div className="flex items-center gap-2 sm:gap-3 md:gap-4 shrink-0">
         {/* Stock & Expiration Alert Notification Bell */}
         <div className="relative">
           <button

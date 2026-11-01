@@ -192,6 +192,7 @@ const AppContent: React.FC = () => {
           onSwitchRole={handleSwitchRole}
           medications={medications}
           pharmacyInfo={pharmacyInfo}
+          sales={sales}
           notificationSettings={notificationSettings}
           onUpdateNotificationSettings={updateNotificationSettings}
           onTriggerTestAlert={triggerTestAlert}
@@ -323,15 +324,6 @@ const AppContent: React.FC = () => {
         activeTab={activeTab} 
         currentUser={currentUser} 
       />
-
-      {/* Floating Sales Pulse Widget: Persistente, no incisivo, configurable por día, semana, mes, bimestre, trimestre, año */}
-      <div className="fixed bottom-20 md:bottom-5 right-4 z-30 pointer-events-auto">
-        <SalesPulseWidget
-          sales={sales}
-          currencySymbol={currency.symbol}
-          pharmacyInfo={pharmacyInfo}
-        />
-      </div>
 
       <StockTransferModal
         isOpen={isTransferModalOpen}

@@ -769,47 +769,76 @@ export const exportInvoicesDetailedToExcel = (
     });
   });
 
-  // Sheet 3: Register Summary (Caja 1 vs Caja 2)
-  const caja1Sales = sales.filter(s => (s.cashRegister || 'Caja 1') === 'Caja 1');
-  const caja2Sales = sales.filter(s => s.cashRegister === 'Caja 2');
+  // Sheet 3: Register Summary (Cajas 1 y 2 en Sucursal 1, Cajas 3 y 4 en Sucursal 2)
+  const calcReg = (regName: string) => {
+    const regSales = sales.filter(s => (s.cashRegister || 'Caja 1') === regName);
+    const total = regSales.reduce((sum, s) => sum + s.total, 0);
+    const cash = regSales.filter(s => s.paymentMethod === 'CASH').reduce((sum, s) => sum + s.total, 0);
+    const qr = regSales.filter(s => s.paymentMethod === 'QR').reduce((sum, s) => sum + s.total, 0);
+    const card = regSales.filter(s => s.paymentMethod === 'CARD').reduce((sum, s) => sum + s.total, 0);
+    const cashiers = Array.from(new Set(regSales.map(s => s.cashierName || s.userId))).join(', ') || 'N/A';
+    return { count: regSales.length, total, cash, qr, card, cashiers };
+  };
 
-  const caja1Total = caja1Sales.reduce((sum, s) => sum + s.total, 0);
-  const caja2Total = caja2Sales.reduce((sum, s) => sum + s.total, 0);
+  const r1 = calcReg('Caja 1');
+  const r2 = calcReg('Caja 2');
+  const r3 = calcReg('Caja 3');
+  const r4 = calcReg('Caja 4');
 
-  const caja1Cash = caja1Sales.filter(s => s.paymentMethod === 'CASH').reduce((sum, s) => sum + s.total, 0);
-  const caja1QR = caja1Sales.filter(s => s.paymentMethod === 'QR').reduce((sum, s) => sum + s.total, 0);
-  const caja1Card = caja1Sales.filter(s => s.paymentMethod === 'CARD').reduce((sum, s) => sum + s.total, 0);
-
-  const caja2Cash = caja2Sales.filter(s => s.paymentMethod === 'CASH').reduce((sum, s) => sum + s.total, 0);
-  const caja2QR = caja2Sales.filter(s => s.paymentMethod === 'QR').reduce((sum, s) => sum + s.total, 0);
-  const caja2Card = caja2Sales.filter(s => s.paymentMethod === 'CARD').reduce((sum, s) => sum + s.total, 0);
+  const totalAllRev = r1.total + r2.total + r3.total + r4.total;
+  const totalAllCash = r1.cash + r2.cash + r3.cash + r4.cash;
+  const totalAllQR = r1.qr + r2.qr + r3.qr + r4.qr;
+  const totalAllCard = r1.card + r2.card + r3.card + r4.card;
 
   const registerSummary = [
     {
+      'Sucursal': 'Sucursal Central (Principal)',
       'Caja': 'Caja 1',
-      'Total Transacciones': caja1Sales.length,
-      'Total Facturado (Bs)': caja1Total.toFixed(2),
-      'Efectivo (Bs)': caja1Cash.toFixed(2),
-      'Pago QR (Bs)': caja1QR.toFixed(2),
-      'Tarjeta (Bs)': caja1Card.toFixed(2),
-      'Cajeros Asignados': Array.from(new Set(caja1Sales.map(s => s.cashierName || s.userId))).join(', ') || 'N/A'
+      'Total Transacciones': r1.count,
+      'Total Facturado (Bs)': r1.total.toFixed(2),
+      'Efectivo (Bs)': r1.cash.toFixed(2),
+      'Pago QR (Bs)': r1.qr.toFixed(2),
+      'Tarjeta (Bs)': r1.card.toFixed(2),
+      'Cajeros Asignados': r1.cashiers
     },
     {
+      'Sucursal': 'Sucursal Central (Principal)',
       'Caja': 'Caja 2',
-      'Total Transacciones': caja2Sales.length,
-      'Total Facturado (Bs)': caja2Total.toFixed(2),
-      'Efectivo (Bs)': caja2Cash.toFixed(2),
-      'Pago QR (Bs)': caja2QR.toFixed(2),
-      'Tarjeta (Bs)': caja2Card.toFixed(2),
-      'Cajeros Asignados': Array.from(new Set(caja2Sales.map(s => s.cashierName || s.userId))).join(', ') || 'N/A'
+      'Total Transacciones': r2.count,
+      'Total Facturado (Bs)': r2.total.toFixed(2),
+      'Efectivo (Bs)': r2.cash.toFixed(2),
+      'Pago QR (Bs)': r2.qr.toFixed(2),
+      'Tarjeta (Bs)': r2.card.toFixed(2),
+      'Cajeros Asignados': r2.cashiers
     },
     {
-      'Caja': 'TOTAL GENERAL',
+      'Sucursal': 'Sucursal 2 (Norte)',
+      'Caja': 'Caja 3',
+      'Total Transacciones': r3.count,
+      'Total Facturado (Bs)': r3.total.toFixed(2),
+      'Efectivo (Bs)': r3.cash.toFixed(2),
+      'Pago QR (Bs)': r3.qr.toFixed(2),
+      'Tarjeta (Bs)': r3.card.toFixed(2),
+      'Cajeros Asignados': r3.cashiers
+    },
+    {
+      'Sucursal': 'Sucursal 2 (Norte)',
+      'Caja': 'Caja 4',
+      'Total Transacciones': r4.count,
+      'Total Facturado (Bs)': r4.total.toFixed(2),
+      'Efectivo (Bs)': r4.cash.toFixed(2),
+      'Pago QR (Bs)': r4.qr.toFixed(2),
+      'Tarjeta (Bs)': r4.card.toFixed(2),
+      'Cajeros Asignados': r4.cashiers
+    },
+    {
+      'Sucursal': 'CONSOLIDADO GENERAL',
+      'Caja': 'TOTAL TODAS LAS SUCURSALES',
       'Total Transacciones': sales.length,
-      'Total Facturado (Bs)': (caja1Total + caja2Total).toFixed(2),
-      'Efectivo (Bs)': (caja1Cash + caja2Cash).toFixed(2),
-      'Pago QR (Bs)': (caja1QR + caja2QR).toFixed(2),
-      'Tarjeta (Bs)': (caja1Card + caja2Card).toFixed(2),
+      'Total Facturado (Bs)': totalAllRev.toFixed(2),
+      'Efectivo (Bs)': totalAllCash.toFixed(2),
+      'Pago QR (Bs)': totalAllQR.toFixed(2),
+      'Tarjeta (Bs)': totalAllCard.toFixed(2),
       'Cajeros Asignados': 'Todos los operadores'
     }
   ];

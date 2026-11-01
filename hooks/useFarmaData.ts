@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useRef } from 'react';
-import { Medication, User, SaleItem, InsurancePlan, Customer, SaleRecord, Currency, Supplier, Purchase, PharmacyInfo, PrescriptionData, StockTransfer } from '@/types';
+import { Medication, User, SaleItem, InsurancePlan, Customer, SaleRecord, Currency, Supplier, Purchase, PharmacyInfo, PrescriptionData, StockTransfer, CashRegisterId } from '@/types';
 import { MOCK_MEDICATIONS, MOCK_CUSTOMERS, SUPPORTED_CURRENCIES, MOCK_STAFF, MOCK_SUPPLIERS, MOCK_SALES, MOCK_PURCHASES, DEFAULT_PHARMACY_INFO, DEFAULT_DISCOUNT_PLANS } from '@/constants';
 import { 
   getStoredSupabaseConfig, 
@@ -229,9 +229,9 @@ export const useFarmaData = () => {
     return SUPPORTED_CURRENCIES[0];
   });
 
-  const [activeCashRegister, setActiveCashRegister] = useState<'Caja 1' | 'Caja 2'>(() => {
+  const [activeCashRegister, setActiveCashRegister] = useState<CashRegisterId>(() => {
     try {
-      return (localStorage.getItem('FARMA_ACTIVE_REGISTER') as 'Caja 1' | 'Caja 2') || 'Caja 1';
+      return (localStorage.getItem('FARMA_ACTIVE_REGISTER') as CashRegisterId) || 'Caja 1';
     } catch {
       return 'Caja 1';
     }
@@ -792,7 +792,7 @@ export const useFarmaData = () => {
     documentType: 'FACTURA' | 'RECIBO' = 'FACTURA',
     clientNitCi?: string,
     qrVerified?: boolean,
-    cashRegisterParam?: 'Caja 1' | 'Caja 2'
+    cashRegisterParam?: CashRegisterId
   ): SaleRecord => {
     const subtotal = items.reduce((sum, item) => sum + item.subtotal, 0);
     const discount = subtotal * (insurance.coveragePercent / 100);

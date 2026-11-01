@@ -7,8 +7,8 @@ import {
   FileSpreadsheet, Clock, AlertTriangle, TrendingUp, Percent, Sparkles, Tag,
   Ban, RotateCcw
 } from 'lucide-react';
-import { Medication, SaleItem, InsurancePlan, PrescriptionData, Customer, SaleRecord, PharmacyInfo, User as UserType } from '@/types';
-import { DEFAULT_DISCOUNT_PLANS } from '@/constants';
+import { Medication, SaleItem, InsurancePlan, PrescriptionData, Customer, SaleRecord, PharmacyInfo, User as UserType, CashRegisterId } from '@/types';
+import { DEFAULT_DISCOUNT_PLANS, CASH_REGISTERS, getRegisterBranch } from '@/constants';
 import { generateBolivianInvoice, generate5x8Invoice, exportSingleInvoiceToExcel } from '../lib/invoiceUtils';
 
 interface PosSystemProps {
@@ -23,7 +23,7 @@ interface PosSystemProps {
     documentType?: 'FACTURA' | 'RECIBO',
     clientNitCi?: string,
     qrVerified?: boolean,
-    cashRegisterParam?: 'Caja 1' | 'Caja 2'
+    cashRegisterParam?: CashRegisterId
   ) => SaleRecord;
   onVoidSale?: (saleId: string, reason: string) => { success: boolean; message: string };
   onAddPatient: (patient: Customer) => void;
@@ -31,8 +31,8 @@ interface PosSystemProps {
   businessQR: string | null;
   pharmacyInfo?: PharmacyInfo;
   currentUser?: UserType | null;
-  activeCashRegister?: 'Caja 1' | 'Caja 2';
-  onChangeCashRegister?: (reg: 'Caja 1' | 'Caja 2') => void;
+  activeCashRegister?: CashRegisterId;
+  onChangeCashRegister?: (reg: CashRegisterId) => void;
   discountPlans?: InsurancePlan[];
   onAddDiscountPlan?: (plan: Omit<InsurancePlan, 'id'>) => InsurancePlan;
 }
@@ -52,7 +52,7 @@ const PosSystem: React.FC<PosSystemProps> = ({
   discountPlans = DEFAULT_DISCOUNT_PLANS,
   onAddDiscountPlan
 }) => {
-  const [selectedRegister, setSelectedRegister] = useState<'Caja 1' | 'Caja 2'>(activeCashRegister);
+  const [selectedRegister, setSelectedRegister] = useState<CashRegisterId>(activeCashRegister);
   const [cart, setCart] = useState<SaleItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedInsurance, setSelectedInsurance] = useState<InsurancePlan>(discountPlans[0] || DEFAULT_DISCOUNT_PLANS[0]);
@@ -83,7 +83,7 @@ const PosSystem: React.FC<PosSystemProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [lowStockWarnings, setLowStockWarnings] = useState<{ name: string; remainingBoxes: number; minStock: number }[]>([]);
 
-  const handleRegisterSwitch = (reg: 'Caja 1' | 'Caja 2') => {
+  const handleRegisterSwitch = (reg: CashRegisterId) => {
     setSelectedRegister(reg);
     if (onChangeCashRegister) {
       onChangeCashRegister(reg);
@@ -380,36 +380,86 @@ const PosSystem: React.FC<PosSystemProps> = ({
         <div className="p-3 md:p-5 bg-white border-b border-slate-200 sticky top-0 z-10 space-y-3">
           {/* Top Register & Cashier Selection Bar */}
           <div className="flex flex-wrap items-center justify-between gap-2.5 pb-1">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1">
-                <Store className="w-3.5 h-3.5 text-emerald-600" />
-                Punto de Venta:
-              </span>
-              <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-inner">
-                <button
-                  type="button"
-                  onClick={() => handleRegisterSwitch('Caja 1')}
-                  className={`px-3 py-1 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 ${
-                    selectedRegister === 'Caja 1'
-                      ? 'bg-emerald-600 text-white shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <Store className="w-3 h-3" />
-                  <span>Caja 1</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleRegisterSwitch('Caja 2')}
-                  className={`px-3 py-1 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 ${
-                    selectedRegister === 'Caja 2'
-                      ? 'bg-emerald-600 text-white shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <Store className="w-3 h-3" />
-                  <span>Caja 2</span>
-                </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                  <Store className="w-3.5 h-3.5 text-emerald-600" />
+                  Caja:
+                </span>
+                <span className="text-[10px] font-extrabold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200">
+                  📍 {getRegisterBranch(selectedRegister)}
+                </span>
+              </div>
+
+              {/* Selector de Cajas agrupado por Sucursal */}
+              <div className="flex flex-wrap items-center bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-inner gap-1">
+                {/* Sucursal 1 */}
+                <div className="flex items-center gap-1">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 px-1 hidden md:inline">
+                    Suc. 1:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleRegisterSwitch('Caja 1')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all flex items-center gap-1 ${
+                      selectedRegister === 'Caja 1'
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
+                    }`}
+                    title="Caja 1 - Sucursal Central (Principal)"
+                  >
+                    <Store className="w-3 h-3" />
+                    <span>Caja 1</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRegisterSwitch('Caja 2')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all flex items-center gap-1 ${
+                      selectedRegister === 'Caja 2'
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
+                    }`}
+                    title="Caja 2 - Sucursal Central (Principal)"
+                  >
+                    <Store className="w-3 h-3" />
+                    <span>Caja 2</span>
+                  </button>
+                </div>
+
+                <span className="w-px h-4 bg-slate-300 mx-0.5 hidden sm:inline-block" />
+
+                {/* Sucursal 2 */}
+                <div className="flex items-center gap-1">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 px-1 hidden md:inline">
+                    Suc. 2:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleRegisterSwitch('Caja 3')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all flex items-center gap-1 ${
+                      selectedRegister === 'Caja 3'
+                        ? 'bg-purple-600 text-white shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
+                    }`}
+                    title="Caja 3 - Sucursal 2 (Norte)"
+                  >
+                    <Store className="w-3 h-3" />
+                    <span>Caja 3</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRegisterSwitch('Caja 4')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all flex items-center gap-1 ${
+                      selectedRegister === 'Caja 4'
+                        ? 'bg-amber-600 text-white shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
+                    }`}
+                    title="Caja 4 - Sucursal 2 (Norte)"
+                  >
+                    <Store className="w-3 h-3" />
+                    <span>Caja 4</span>
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -1004,29 +1054,34 @@ const PosSystem: React.FC<PosSystemProps> = ({
       {/* Checkout Modal - Dedicated space for payment and info */}
       {isCheckoutModalOpen && (
         <div className="fixed inset-0 z-[250] flex items-end md:items-center justify-center bg-slate-900/60 backdrop-blur-md p-0 md:p-4 animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-4xl md:rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[95vh] md:h-auto md:max-h-[90vh] animate-in slide-in-from-bottom-10 duration-500">
-            <div className="p-5 md:p-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
+          <div className="bg-white w-full max-w-5xl xl:max-w-6xl md:rounded-3xl shadow-2xl overflow-hidden flex flex-col h-[95vh] md:h-auto md:max-h-[92vh] animate-in slide-in-from-bottom-10 duration-500">
+            {/* Modal Top Header */}
+            <div className="p-4 sm:p-5 md:p-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-emerald-500 rounded-xl">
+                <div className="p-2.5 bg-emerald-500 rounded-2xl shadow-md shadow-emerald-500/20">
                   <CreditCard className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-lg md:text-xl font-black">Finalizar Venta</h2>
-                  <p className="text-emerald-400 text-[10px] font-black uppercase tracking-widest">Configuración de cobro y documentos</p>
+                  <h2 className="text-base sm:text-lg md:text-xl font-black">Finalizar Venta</h2>
+                  <p className="text-emerald-400 text-[10px] font-black uppercase tracking-widest">Configuración de cobro, productos y documentos</p>
                 </div>
               </div>
-              <button onClick={() => setIsCheckoutModalOpen(false)} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+              <button 
+                onClick={() => setIsCheckoutModalOpen(false)} 
+                className="p-2 hover:bg-white/10 rounded-xl transition-colors text-slate-300 hover:text-white"
+                title="Cerrar ventana"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-5 md:p-8 space-y-6 no-scrollbar">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 space-y-6 no-scrollbar">
               {errorMsg && (
-                <div className="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-xl flex items-start gap-3 shadow-sm animate-in fade-in duration-300">
+                <div className="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-2xl flex items-start gap-3 shadow-xs animate-in fade-in duration-300">
                   <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
                   <div className="flex-1">
-                    <p className="font-extrabold text-xs text-rose-900 uppercase tracking-wider">Error de Validación</p>
-                    <p className="text-xs font-bold leading-relaxed mt-1">{errorMsg}</p>
+                    <p className="font-extrabold text-xs text-rose-900 uppercase tracking-wider">Aviso de Validación</p>
+                    <p className="text-xs font-bold leading-relaxed mt-0.5">{errorMsg}</p>
                   </div>
                   <button 
                     onClick={() => setErrorMsg(null)} 
@@ -1038,19 +1093,160 @@ const PosSystem: React.FC<PosSystemProps> = ({
                 </div>
               )}
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 md:gap-12">
-                {/* Columna Izquierda: Datos de Pago y Receta */}
-                <div className="space-y-6">
+              {/* Grid de 3 Columnas: 1. Detalle de Productos a Vender | 2. Comprobante & Método | 3. Resumen y Confirmar */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 items-start">
+                
+                {/* COLUMNA 1: LISTA DETALLADA Y EDITABLE DE PRODUCTOS A VENDER */}
+                <div className="lg:col-span-5 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+                      <span>Productos en esta Venta</span>
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/90 px-2 py-0.5 rounded-full lowercase">
+                        {cart.length} {cart.length === 1 ? 'ítem' : 'ítems'}
+                      </span>
+                    </h3>
+                    <span className="text-[10px] font-bold text-slate-400">
+                      Modifica si hay error
+                    </span>
+                  </div>
+
+                  {cart.length === 0 ? (
+                    <div className="p-8 text-center bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl space-y-3">
+                      <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mx-auto">
+                        <ShoppingBag className="w-6 h-6" />
+                      </div>
+                      <p className="text-xs font-black text-slate-800">No quedan productos en esta venta</p>
+                      <p className="text-[11px] text-slate-400">Se han retirado todos los productos del carrito.</p>
+                      <button
+                        type="button"
+                        onClick={() => setIsCheckoutModalOpen(false)}
+                        className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition-all shadow-sm active:scale-95"
+                      >
+                        Volver a Seleccionar Productos
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="max-h-[380px] lg:max-h-[460px] overflow-y-auto space-y-2.5 pr-1.5 no-scrollbar">
+                      {cart.map((item, index) => {
+                        const med = item.medication;
+                        const currentBatch = med.batches.find(b => b.lotNumber === item.selectedBatch);
+                        const maxBatchQty = currentBatch 
+                          ? (item.isFractional ? currentBatch.quantity : Math.floor(currentBatch.quantity / (med.unitsPerBox || 1)))
+                          : 0;
+
+                        return (
+                          <div 
+                            key={`${item.medication.id}-${item.isFractional}-${item.selectedBatch}-${index}`}
+                            className="p-3.5 bg-white border border-slate-200/90 hover:border-emerald-300 rounded-2xl transition-all shadow-2xs space-y-2.5 group"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <h4 className="font-black text-xs sm:text-sm text-slate-900 leading-snug">
+                                    {med.name}
+                                  </h4>
+                                  <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider ${
+                                    item.isFractional 
+                                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                                      : 'bg-blue-100 text-blue-800 border border-blue-200'
+                                  }`}>
+                                    {item.isFractional ? 'Unidad' : 'Caja'}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 text-[10px] text-slate-500 font-bold mt-1 flex-wrap">
+                                  <span className="bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200 text-slate-700 font-mono">
+                                    LOTE: {item.selectedBatch}
+                                  </span>
+                                  <span>
+                                    {currencySymbol}{item.isFractional ? med.priceUnit.toFixed(2) : med.priceBox.toFixed(2)} c/u
+                                  </span>
+                                  <span className="text-slate-400">
+                                    ({maxBatchQty} disp.)
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Botón Eliminar Ítem directo */}
+                              <button
+                                type="button"
+                                onClick={() => removeFromCart(index)}
+                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors shrink-0"
+                                title="Quitar este producto de la venta"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+
+                            {/* Controles interactivos de Cantidad y Subtotal en tiempo real */}
+                            <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                              <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl p-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (item.quantity > 1) {
+                                      updateCartQuantity(index, -1);
+                                    } else {
+                                      removeFromCart(index);
+                                    }
+                                  }}
+                                  className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white text-slate-600 hover:text-rose-600 transition-colors active:scale-95"
+                                  title={item.quantity === 1 ? 'Eliminar ítem' : 'Restar 1 unidad'}
+                                >
+                                  {item.quantity === 1 ? (
+                                    <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                                  ) : (
+                                    <Minus className="w-3.5 h-3.5 font-bold" />
+                                  )}
+                                </button>
+
+                                <span className="w-9 text-center font-black text-xs text-slate-900 font-mono">
+                                  {item.quantity}
+                                </span>
+
+                                <button
+                                  type="button"
+                                  onClick={() => updateCartQuantity(index, 1)}
+                                  disabled={item.quantity >= maxBatchQty}
+                                  className={`w-7 h-7 flex items-center justify-center rounded-lg transition-colors active:scale-95 ${
+                                    item.quantity >= maxBatchQty
+                                      ? 'text-slate-300 cursor-not-allowed'
+                                      : 'hover:bg-white text-slate-700 hover:text-emerald-700'
+                                  }`}
+                                  title={item.quantity >= maxBatchQty ? 'Stock máximo alcanzado para este lote' : 'Sumar 1 unidad'}
+                                >
+                                  <Plus className="w-3.5 h-3.5 font-bold" />
+                                </button>
+                              </div>
+
+                              <div className="text-right">
+                                <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block leading-none">
+                                  Subtotal
+                                </span>
+                                <span className="text-xs sm:text-sm font-black font-mono text-slate-900">
+                                  {currencySymbol}{item.subtotal.toFixed(2)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* COLUMNA 2: TIPO DE COMPROBANTE Y MÉTODO DE PAGO */}
+                <div className="lg:col-span-4 space-y-6">
                   {/* Tipo de Comprobante: Factura vs Recibo */}
                   <div className="space-y-3">
                     <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
                       <div className="w-1.5 h-1.5 bg-blue-500 rounded-full" /> 1. Tipo de Comprobante
                     </h3>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 gap-2.5">
                       <button
                         type="button"
                         onClick={() => setDocumentType('FACTURA')}
-                        className={`p-3.5 rounded-2xl border-2 font-bold text-xs flex items-center justify-center gap-2 transition-all ${
+                        className={`p-3 rounded-2xl border-2 font-bold text-xs flex items-center justify-center gap-2 transition-all ${
                           documentType === 'FACTURA'
                             ? 'bg-slate-900 border-slate-900 text-white shadow-lg'
                             : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
@@ -1063,14 +1259,14 @@ const PosSystem: React.FC<PosSystemProps> = ({
                       <button
                         type="button"
                         onClick={() => setDocumentType('RECIBO')}
-                        className={`p-3.5 rounded-2xl border-2 font-bold text-xs flex items-center justify-center gap-2 transition-all ${
+                        className={`p-3 rounded-2xl border-2 font-bold text-xs flex items-center justify-center gap-2 transition-all ${
                           documentType === 'RECIBO'
                             ? 'bg-slate-900 border-slate-900 text-white shadow-lg'
                             : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
                         }`}
                       >
                         <Receipt className="w-4 h-4 text-amber-400" />
-                        <span>Solo Recibo (Sin Factura)</span>
+                        <span>Solo Recibo</span>
                       </button>
                     </div>
 
@@ -1084,45 +1280,45 @@ const PosSystem: React.FC<PosSystemProps> = ({
                         placeholder="Ej: 8492019 o 0 para Sin NIT"
                         value={clientNitCi}
                         onChange={(e) => setClientNitCi(e.target.value)}
-                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-emerald-500/10 text-xs font-semibold"
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-emerald-500/10 text-xs font-semibold"
                       />
                     </div>
                   </div>
 
                   {/* Método de Pago */}
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
                       <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> 2. Método de Pago
                     </h3>
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-3 gap-2">
                       <PaymentMethodBtn 
                         active={paymentMethod === 'CASH'} 
                         onClick={() => { setPaymentMethod('CASH'); setQrPaymentConfirmed(false); }} 
                         label="Efectivo" 
-                        icon={<DollarSign className="w-5 h-5" />}
+                        icon={<DollarSign className="w-4 h-4" />}
                       />
                       <PaymentMethodBtn 
                         active={paymentMethod === 'QR'} 
                         onClick={() => { setPaymentMethod('QR'); setQrPaymentConfirmed(false); }} 
                         label="Pago QR" 
-                        icon={<QrCode className="w-5 h-5" />}
+                        icon={<QrCode className="w-4 h-4" />}
                       />
                       <PaymentMethodBtn 
                         active={paymentMethod === 'CARD'} 
                         onClick={() => { setPaymentMethod('CARD'); setQrPaymentConfirmed(false); }} 
                         label="Tarjeta" 
-                        icon={<CreditCard className="w-5 h-5" />}
+                        icon={<CreditCard className="w-4 h-4" />}
                       />
                     </div>
                   </div>
 
-                  {/* Sección de Receta (Solo si es necesario) */}
+                  {/* Sección de Receta (Solo si hay medicamentos controlados) */}
                   {cart.some(item => item.medication.isControlled) && (
-                    <div className="space-y-4 animate-in fade-in slide-in-from-left-4">
+                    <div className="space-y-3 animate-in fade-in slide-in-from-left-4">
                       <h3 className="text-xs font-black text-rose-500 uppercase tracking-[0.2em] flex items-center gap-2">
                         <div className="w-1.5 h-1.5 bg-rose-500 rounded-full" /> 3. Datos de Receta (Controlados)
                       </h3>
-                      <div className="bg-rose-50/50 p-5 rounded-xl border border-rose-100 space-y-4">
+                      <div className="bg-rose-50/50 p-4 rounded-xl border border-rose-100 space-y-3">
                         <div className="flex flex-col gap-1">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Médico / Matrícula</label>
                           <input 
@@ -1130,7 +1326,7 @@ const PosSystem: React.FC<PosSystemProps> = ({
                             placeholder="Ej: Dr. Juan Pérez - MP 12345"
                             value={prescription.doctorLicense}
                             onChange={(e) => setPrescription({...prescription, doctorLicense: e.target.value})}
-                            className="w-full px-4 py-3 bg-white border border-rose-200 rounded-xl outline-none focus:ring-4 focus:ring-rose-500/10 text-sm font-medium"
+                            className="w-full px-3 py-2 bg-white border border-rose-200 rounded-xl outline-none focus:ring-4 focus:ring-rose-500/10 text-xs font-medium"
                           />
                         </div>
                         <div className="flex flex-col gap-1">
@@ -1140,7 +1336,7 @@ const PosSystem: React.FC<PosSystemProps> = ({
                             placeholder="Nombre completo según receta"
                             value={prescription.patientName}
                             onChange={(e) => setPrescription({...prescription, patientName: e.target.value})}
-                            className="w-full px-4 py-3 bg-white border border-rose-200 rounded-xl outline-none focus:ring-4 focus:ring-rose-500/10 text-sm font-medium"
+                            className="w-full px-3 py-2 bg-white border border-rose-200 rounded-xl outline-none focus:ring-4 focus:ring-rose-500/10 text-xs font-medium"
                           />
                         </div>
                       </div>
@@ -1149,30 +1345,26 @@ const PosSystem: React.FC<PosSystemProps> = ({
 
                   {/* QR de Pago con Confirmación Obligatoria */}
                   {paymentMethod === 'QR' && (
-                    <div className="space-y-4 animate-in zoom-in-95 duration-300">
+                    <div className="space-y-3 animate-in zoom-in-95 duration-300">
                       <h3 className="text-xs font-black text-emerald-600 uppercase tracking-[0.2em] flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> 4. Pago por QR (Verificación Requerida)
+                        <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" /> Pago QR (Verificación)
                       </h3>
-                      <div className="bg-slate-50 p-6 rounded-xl border border-slate-200/80 flex flex-col items-center">
-                        <div className="text-center mb-3">
-                          <p className="text-xs font-extrabold text-slate-700">Monto exacto a transferir:</p>
-                          <p className="text-2xl font-black text-emerald-600">{currencySymbol}{total.toFixed(2)}</p>
+                      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 flex flex-col items-center">
+                        <div className="text-center mb-2">
+                          <p className="text-[11px] font-extrabold text-slate-600">Monto exacto a transferir:</p>
+                          <p className="text-xl font-black text-emerald-600">{currencySymbol}{total.toFixed(2)}</p>
                         </div>
 
                         {businessQR ? (
-                          <div className="bg-white p-4 rounded-xl shadow-md border border-slate-100 mb-4">
-                            <img src={businessQR} alt="QR de Pago" className="w-44 h-44 object-contain" />
+                          <div className="bg-white p-3 rounded-xl shadow-xs border border-slate-100 mb-3">
+                            <img src={businessQR} alt="QR de Pago" className="w-36 h-36 object-contain" />
                           </div>
                         ) : (
-                          <div className="w-44 h-44 bg-white border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center text-slate-400 gap-2 mb-4">
-                            <AlertCircle className="w-8 h-8 opacity-20" />
-                            <p className="text-[9px] font-black uppercase text-center px-4">QR no configurado</p>
+                          <div className="w-36 h-36 bg-white border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center text-slate-400 gap-1 mb-3">
+                            <AlertCircle className="w-6 h-6 opacity-30" />
+                            <p className="text-[9px] font-black uppercase text-center px-2">QR no configurado</p>
                           </div>
                         )}
-
-                        <p className="text-[10px] font-bold text-slate-500 text-center mb-4 max-w-xs">
-                          Pide al cliente que escanee el código QR y complete el pago en su app bancaria.
-                        </p>
 
                         {!qrPaymentConfirmed ? (
                           <button
@@ -1181,14 +1373,14 @@ const PosSystem: React.FC<PosSystemProps> = ({
                               setQrPaymentConfirmed(true);
                               setErrorMsg(null);
                             }}
-                            className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs uppercase tracking-wider shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 active:scale-95"
+                            className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs uppercase tracking-wider shadow-sm transition-all flex items-center justify-center gap-2 active:scale-95"
                           >
-                            <CheckCircle2 className="w-4 h-4" /> Confirmar Pago QR Recibido
+                            <CheckCircle2 className="w-4 h-4" /> Confirmar Pago QR
                           </button>
                         ) : (
-                          <div className="w-full p-3 bg-emerald-50 border border-emerald-300 text-emerald-900 rounded-xl flex items-center justify-center gap-2 text-xs font-black animate-in fade-in">
+                          <div className="w-full p-2.5 bg-emerald-50 border border-emerald-300 text-emerald-900 rounded-xl flex items-center justify-center gap-2 text-xs font-black">
                             <CheckCircle2 className="w-4 h-4 text-emerald-600" /> 
-                            <span>Pago QR Verificado (Listo para emitir {documentType === 'FACTURA' ? 'Factura' : 'Recibo'})</span>
+                            <span>Pago QR Verificado</span>
                           </div>
                         )}
                       </div>
@@ -1196,71 +1388,72 @@ const PosSystem: React.FC<PosSystemProps> = ({
                   )}
                 </div>
 
-                {/* Columna Derecha: Resumen de Totales */}
-                <div className="space-y-6">
+                {/* COLUMNA 3: RESUMEN DE COBRO Y EMISIÓN */}
+                <div className="lg:col-span-3 space-y-5">
                   <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
                     <div className="w-1.5 h-1.5 bg-slate-400 rounded-full" /> Resumen de Cobro
                   </h3>
-                  <div className="bg-slate-900 rounded-2xl p-6 md:p-8 text-white shadow-xl shadow-slate-900/30">
-                    <div className="space-y-4 mb-6">
+
+                  <div className="bg-slate-900 rounded-3xl p-5 sm:p-6 text-white shadow-xl shadow-slate-900/30">
+                    <div className="space-y-3 mb-5">
                       <div className="flex justify-between items-center opacity-60">
-                        <span className="text-xs font-bold uppercase tracking-widest">Subtotal</span>
-                        <span className="font-black">{currencySymbol}{subtotal.toFixed(2)}</span>
+                        <span className="text-[11px] font-bold uppercase tracking-widest">Subtotal</span>
+                        <span className="font-mono font-bold text-sm">{currencySymbol}{subtotal.toFixed(2)}</span>
                       </div>
                       {discount > 0 && (
                         <div className="flex justify-between items-center text-emerald-400">
-                          <span className="text-xs font-bold uppercase tracking-widest">
+                          <span className="text-[11px] font-bold uppercase tracking-widest truncate max-w-[140px]">
                             Descuento {customDiscountValue !== '' ? `(${customDiscountType === 'PERCENT' ? `${customDiscountValue}%` : `${currencySymbol}${customDiscountValue}`})` : `(${selectedInsurance.name})`}
                           </span>
-                          <span className="font-black">- {currencySymbol}{discount.toFixed(2)}</span>
+                          <span className="font-mono font-bold text-sm">- {currencySymbol}{discount.toFixed(2)}</span>
                         </div>
                       )}
-                      <div className="h-px bg-white/10 my-4" />
+                      <div className="h-px bg-white/10 my-3" />
                       <div className="flex justify-between items-end">
-                        <span className="text-sm font-black uppercase tracking-[0.2em]">Total a Pagar</span>
-                        <span className="text-3xl md:text-4xl font-black text-emerald-400">{currencySymbol}{total.toFixed(2)}</span>
+                        <span className="text-xs font-black uppercase tracking-[0.15em]">Total a Pagar</span>
+                        <span className="text-2xl sm:text-3xl font-black text-emerald-400 font-mono">{currencySymbol}{total.toFixed(2)}</span>
                       </div>
 
-                      {/* Apartado de Ganancia en Modal de Cobro */}
-                      <div className="mt-3 p-3 bg-white/10 rounded-xl border border-white/15 flex items-center justify-between text-xs">
-                        <span className="text-emerald-300 font-bold flex items-center gap-1.5">
-                          <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
-                          Ganancia Neta de esta Venta:
+                      {/* Apartado de Ganancia Neta */}
+                      <div className="mt-3 p-2.5 bg-white/10 rounded-xl border border-white/15 flex items-center justify-between text-xs">
+                        <span className="text-emerald-300 font-bold flex items-center gap-1.5 text-[11px]">
+                          <TrendingUp className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                          Ganancia Neta:
                         </span>
-                        <span className="font-black text-white text-sm">
+                        <span className="font-black text-white text-xs sm:text-sm font-mono">
                           +{currencySymbol}{netProfitAfterDiscount.toFixed(2)} ({profitMarginPercent}%)
                         </span>
                       </div>
                     </div>
 
-                    <div className="space-y-2.5">
-                      <div className="p-3 bg-white/5 rounded-xl border border-white/10 flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-400">
-                          <User className="w-4 h-4" />
+                    <div className="space-y-2">
+                      <div className="p-2.5 bg-white/5 rounded-xl border border-white/10 flex items-center gap-2.5">
+                        <div className="w-7 h-7 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
+                          <User className="w-3.5 h-3.5" />
                         </div>
-                        <div>
+                        <div className="min-w-0 flex-1">
                           <p className="text-[9px] font-black text-white/40 uppercase tracking-widest">Cliente / Paciente</p>
-                          <p className="text-xs font-bold">{selectedCustomer ? selectedCustomer.name : 'Venta General'}</p>
+                          <p className="text-xs font-bold truncate">{selectedCustomer ? selectedCustomer.name : 'Venta General'}</p>
                         </div>
                       </div>
 
-                      <div className="p-3 bg-white/5 rounded-xl border border-white/10 flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center text-blue-400">
-                          <FileText className="w-4 h-4" />
+                      <div className="p-2.5 bg-white/5 rounded-xl border border-white/10 flex items-center gap-2.5">
+                        <div className="w-7 h-7 rounded-lg bg-blue-500/20 flex items-center justify-center text-blue-400 shrink-0">
+                          <FileText className="w-3.5 h-3.5" />
                         </div>
-                        <div>
-                          <p className="text-[9px] font-black text-white/40 uppercase tracking-widest">Documento a Emitir</p>
-                          <p className="text-xs font-bold">{documentType === 'FACTURA' ? 'Factura Oficial de Venta' : 'Solo Recibo (Sin Factura)'}</p>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[9px] font-black text-white/40 uppercase tracking-widest">Documento</p>
+                          <p className="text-xs font-bold truncate">{documentType === 'FACTURA' ? 'Factura Oficial de Venta' : 'Solo Recibo (Sin Factura)'}</p>
                         </div>
                       </div>
 
-                      <div className="p-3 bg-white/5 rounded-xl border border-white/10 flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center text-purple-400">
-                          <Activity className="w-4 h-4" />
+                      <div className="p-2.5 bg-white/5 rounded-xl border border-white/10 flex items-center gap-2.5">
+                        <div className="w-7 h-7 rounded-lg bg-purple-500/20 flex items-center justify-center text-purple-400 shrink-0">
+                          <Activity className="w-3.5 h-3.5" />
                         </div>
-                        <div>
-                          <p className="text-[9px] font-black text-white/40 uppercase tracking-widest">Seguro Aplicado</p>
-                          <p className="text-xs font-bold">{selectedInsurance.name}</p>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[9px] font-black text-white/40 uppercase tracking-widest">Seguro / Plan</p>
+                          <p className="text-xs font-bold truncate">{selectedInsurance.name}</p>
                         </div>
                       </div>
                     </div>
@@ -1268,19 +1461,21 @@ const PosSystem: React.FC<PosSystemProps> = ({
 
                   <button 
                     onClick={handleComplete}
-                    disabled={paymentMethod === 'QR' && !qrPaymentConfirmed}
-                    className={`w-full py-4 rounded-xl font-black text-sm md:text-base uppercase tracking-wider shadow-lg transition-all flex items-center justify-center gap-3 active:scale-[0.98] ${
-                      paymentMethod === 'QR' && !qrPaymentConfirmed
+                    disabled={cart.length === 0 || (paymentMethod === 'QR' && !qrPaymentConfirmed)}
+                    className={`w-full py-3.5 rounded-2xl font-black text-xs sm:text-sm uppercase tracking-wider shadow-lg transition-all flex items-center justify-center gap-2.5 active:scale-[0.98] ${
+                      cart.length === 0 || (paymentMethod === 'QR' && !qrPaymentConfirmed)
                         ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
                         : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/30'
                     }`}
                   >
-                    {paymentMethod === 'QR' && !qrPaymentConfirmed
+                    {cart.length === 0
+                      ? 'Sin Productos para Facturar'
+                      : paymentMethod === 'QR' && !qrPaymentConfirmed
                       ? 'Confirme Pago QR para Emitir'
                       : documentType === 'FACTURA'
                       ? 'Confirmar y Emitir Factura'
                       : 'Confirmar y Emitir Recibo'}
-                    <CheckCircle2 className="w-6 h-6" />
+                    <CheckCircle2 className="w-5 h-5" />
                   </button>
 
                   <button
@@ -1294,7 +1489,7 @@ const PosSystem: React.FC<PosSystemProps> = ({
                   </button>
 
                   <p className="text-[10px] text-slate-400 text-center font-bold italic">
-                    Al confirmar, se descontará el stock y se generará {documentType === 'FACTURA' ? 'la factura oficial con el nombre de la farmacia' : 'el recibo de venta'}.
+                    Al confirmar, se descontará el stock y se generará {documentType === 'FACTURA' ? 'la factura oficial' : 'el recibo de venta'}.
                   </p>
                 </div>
               </div>

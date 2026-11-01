@@ -26,6 +26,8 @@ export interface UserPermissions {
   canEditInventory: boolean;
 }
 
+export type CashRegisterId = 'Caja 1' | 'Caja 2' | 'Caja 3' | 'Caja 4';
+
 export interface User {
   id: string;
   name: string;
@@ -37,7 +39,7 @@ export interface User {
   phone?: string;
   email?: string;
   originalRole?: UserRole;
-  assignedRegister?: 'Caja 1' | 'Caja 2';
+  assignedRegister?: CashRegisterId;
 }
 
 export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, UserPermissions> = {
@@ -186,7 +188,7 @@ export interface SaleRecord {
   insuranceName: string;
   userId: string;
   cashierName?: string;
-  cashRegister?: 'Caja 1' | 'Caja 2';
+  cashRegister?: CashRegisterId;
   paymentMethod: PaymentMethod;
   status?: SaleStatus; // 'COMPLETED' o 'ANULADA'
   cancelledAt?: string;
