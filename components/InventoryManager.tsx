@@ -9,7 +9,8 @@ import {
   ArrowDownRight, ArrowUpRight, Zap, Check,
   Sparkles, RefreshCw, Layers, CheckCircle2,
   ChevronDown, ChevronUp, Tag, FileSpreadsheet,
-  ArrowUpDown, Printer, TrendingUp, Percent, ArrowRightLeft
+  ArrowUpDown, Printer, TrendingUp, Percent, ArrowRightLeft,
+  BookOpen, Database, Library
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Medication, Category, Batch, User, canUserEditInventory, PharmacyInfo } from '@/types';
@@ -22,6 +23,7 @@ import {
   getCategoryDefaultImage,
   MedicationPreset
 } from '@/services/commonMeds';
+import { generateVademecumMedications, VADEMECUM_RAW_CATALOG } from '@/services/vademecumData';
 
 interface InventoryManagerProps {
   medications: Medication[];
@@ -104,6 +106,60 @@ const InventoryManager: React.FC<InventoryManagerProps> = ({
       setToastMessage(null);
     }, 4000);
   };
+
+  // Vademecum (+300 Medications) Modal State
+  const [isVademecumModalOpen, setIsVademecumModalOpen] = useState(false);
+  const [vademecumSearch, setVademecumSearch] = useState('');
+  const [vademecumLabFilter, setVademecumLabFilter] = useState('ALL');
+  const [isImportingVademecum, setIsImportingVademecum] = useState(false);
+
+  const handleImportVademecum = (mode: 'APPEND' | 'REPLACE') => {
+    setIsImportingVademecum(true);
+    try {
+      const branch1 = pharmacyInfo?.commercialName || 'Sucursal Central (Principal)';
+      const branch2 = 'Sucursal 2 (Norte)';
+      const vademecumMeds = generateVademecumMedications(branch1, branch2);
+      
+      if (mode === 'REPLACE') {
+        if (onReplaceAll) {
+          onReplaceAll(vademecumMeds);
+        } else {
+          vademecumMeds.forEach(m => onAdd(m));
+        }
+        showToast(`¡Vademécum cargado! Se reemplazó el inventario con ${vademecumMeds.length} medicamentos.`);
+      } else {
+        if (onBatchAdd) {
+          onBatchAdd(vademecumMeds);
+        } else {
+          vademecumMeds.forEach(m => onAdd(m));
+        }
+        showToast(`¡Vademécum incorporado! Se sumaron ${vademecumMeds.length} medicamentos al inventario.`);
+      }
+      setIsVademecumModalOpen(false);
+    } catch (err) {
+      alert('Hubo un problema al cargar los medicamentos del vademécum.');
+    } finally {
+      setIsImportingVademecum(false);
+    }
+  };
+
+  const vademecumLabs = useMemo(() => {
+    const set = new Set<string>();
+    VADEMECUM_RAW_CATALOG.forEach(it => set.add(it.laboratory));
+    return Array.from(set).sort();
+  }, []);
+
+  const filteredVademecum = useMemo(() => {
+    const term = vademecumSearch.trim().toLowerCase();
+    return VADEMECUM_RAW_CATALOG.filter(it => {
+      const matchTerm = !term || 
+        it.name.toLowerCase().includes(term) ||
+        (it.genericName && it.genericName.toLowerCase().includes(term)) ||
+        it.laboratory.toLowerCase().includes(term);
+      const matchLab = vademecumLabFilter === 'ALL' || it.laboratory === vademecumLabFilter;
+      return matchTerm && matchLab;
+    });
+  }, [vademecumSearch, vademecumLabFilter]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canManageInventory = currentUser 
@@ -1336,6 +1392,16 @@ type MedFormData = Omit<Partial<Medication>, 'minStock' | 'maxStock' | 'stockBox
                 >
                   <Printer className="w-3.5 h-3.5 text-amber-700" />
                   <span className="hidden sm:inline">Imprimir Críticos</span>
+                </button>
+
+                <button 
+                  onClick={() => setIsVademecumModalOpen(true)}
+                  className="bg-purple-600 hover:bg-purple-700 text-white p-2.5 md:px-3.5 md:py-2.5 rounded-xl font-black flex items-center justify-center gap-1.5 transition-all text-xs shadow-md shadow-purple-600/25 active:scale-95 cursor-pointer"
+                  title="Cargar catálogo completo de más de 300 medicamentos oficiales"
+                >
+                  <BookOpen className="w-3.5 h-3.5 text-purple-200" />
+                  <span className="hidden sm:inline">Cargar Vademécum (+300 Meds)</span>
+                  <span className="sm:hidden">+300 Meds</span>
                 </button>
 
                 <button 
@@ -3500,6 +3566,198 @@ type MedFormData = Omit<Partial<Medication>, 'minStock' | 'maxStock' | 'stockBox
                     className="flex-[2] py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl shadow-lg shadow-emerald-600/20 active:scale-95"
                   >
                     Confirmar Entrada
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* VADEMÉCUM FARMACÉUTICO MODAL (+300 MEDICAMENTOS) */}
+        {isVademecumModalOpen && (
+          <div className="fixed inset-0 z-[160] flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200">
+              {/* Modal Header */}
+              <div className="p-4 sm:p-5 bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 text-white flex justify-between items-center shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-purple-500 rounded-2xl shadow-lg shadow-purple-500/30">
+                    <BookOpen className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-base sm:text-lg font-black tracking-tight">
+                      Vademécum Farmacéutico (+300 Medicamentos)
+                    </h2>
+                    <p className="text-purple-300 text-[10px] font-bold">
+                      Catálogo oficial de medicamentos listos para incorporar a tu inventario con precios y lotes sugeridos
+                    </p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setIsVademecumModalOpen(false)} 
+                  className="p-1.5 hover:bg-white/10 rounded-xl text-slate-300 hover:text-white transition-colors cursor-pointer"
+                  title="Cerrar"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-4 sm:p-5 flex-1 overflow-hidden flex flex-col gap-3.5 bg-slate-50">
+                {/* Stats Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 shrink-0">
+                  <div className="p-2.5 bg-white border border-slate-200 rounded-xl">
+                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Total en Catálogo</span>
+                    <span className="text-base sm:text-lg font-black text-purple-700 font-mono">{VADEMECUM_RAW_CATALOG.length}</span>
+                    <span className="text-[10px] text-slate-500 font-medium ml-1">medicamentos</span>
+                  </div>
+                  <div className="p-2.5 bg-white border border-slate-200 rounded-xl">
+                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Laboratorios</span>
+                    <span className="text-base sm:text-lg font-black text-indigo-700 font-mono">{vademecumLabs.length}</span>
+                    <span className="text-[10px] text-slate-500 font-medium ml-1">marcas</span>
+                  </div>
+                  <div className="p-2.5 bg-white border border-slate-200 rounded-xl">
+                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Stock Inicial</span>
+                    <span className="text-xs font-black text-emerald-700 block mt-1">Listo (2 Sucursales)</span>
+                    <span className="text-[9px] text-slate-400 font-medium">Lotes y Vto. 2028</span>
+                  </div>
+                  <div className="p-2.5 bg-white border border-slate-200 rounded-xl">
+                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">En Inventario Actual</span>
+                    <span className="text-base sm:text-lg font-black text-slate-800 font-mono">{medications.length}</span>
+                    <span className="text-[10px] text-slate-500 font-medium ml-1">existentes</span>
+                  </div>
+                </div>
+
+                {/* Filter and Search Bar */}
+                <div className="space-y-2 shrink-0">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Buscar por nombre, principio activo o laboratorio en el catálogo..."
+                      value={vademecumSearch}
+                      onChange={(e) => setVademecumSearch(e.target.value)}
+                      className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-purple-500 shadow-2xs"
+                    />
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    {vademecumSearch && (
+                      <button 
+                        onClick={() => setVademecumSearch('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Laboratory Pills */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+                    <button
+                      type="button"
+                      onClick={() => setVademecumLabFilter('ALL')}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all shrink-0 cursor-pointer ${
+                        vademecumLabFilter === 'ALL'
+                          ? 'bg-purple-600 text-white shadow-xs'
+                          : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                      }`}
+                    >
+                      Todos ({VADEMECUM_RAW_CATALOG.length})
+                    </button>
+                    {vademecumLabs.map(lab => {
+                      const count = VADEMECUM_RAW_CATALOG.filter(it => it.laboratory === lab).length;
+                      return (
+                        <button
+                          key={lab}
+                          type="button"
+                          onClick={() => setVademecumLabFilter(lab)}
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all whitespace-nowrap shrink-0 cursor-pointer ${
+                            vademecumLabFilter === lab
+                              ? 'bg-purple-600 text-white shadow-xs'
+                              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                          }`}
+                        >
+                          {lab} ({count})
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Products Preview List */}
+                <div className="flex-1 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 no-scrollbar">
+                  {filteredVademecum.length === 0 ? (
+                    <div className="p-8 text-center text-slate-400 text-xs font-bold">
+                      No se encontraron medicamentos coincidentes con "{vademecumSearch}"
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-slate-100">
+                      {filteredVademecum.map((item, idx) => (
+                        <div key={`${item.name}-${idx}`} className="p-2 sm:px-3 sm:py-2 flex items-center justify-between gap-2 hover:bg-purple-50/40 transition-colors rounded-xl">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-black text-slate-900 truncate">{item.name}</span>
+                              <span className="px-1.5 py-0.2 rounded text-[8px] font-black uppercase tracking-wider bg-purple-100 text-purple-800 border border-purple-200">
+                                {item.laboratory}
+                              </span>
+                              <span className="px-1.5 py-0.2 rounded text-[8px] font-black uppercase tracking-wider bg-slate-100 text-slate-600">
+                                {item.isUnitOnly ? 'Unidad' : `Caja x ${item.unitsPerBox || 20}`}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-slate-500 font-medium truncate mt-0.5">
+                              {item.genericName || item.name} • {item.category || 'Medicamento'}
+                            </p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <span className="text-xs font-black font-mono text-emerald-700 block">
+                              {currencySymbol}{(item.priceBox || 30).toFixed(2)}
+                            </span>
+                            <span className="text-[9px] text-slate-400 font-semibold">
+                              {item.isUnitOnly ? 'por unidad' : 'por caja'}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Modal Footer with Actions */}
+              <div className="p-4 bg-white border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+                <div className="text-xs text-slate-500 font-medium text-center sm:text-left">
+                  <span>Mostrando <strong>{filteredVademecum.length}</strong> de <strong>{VADEMECUM_RAW_CATALOG.length}</strong> medicamentos.</span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setIsVademecumModalOpen(false)}
+                    disabled={isImportingVademecum}
+                    className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all cursor-pointer"
+                  >
+                    Cerrar
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm(`¿Estás seguro de REEMPLAZAR TODO tu inventario actual (${medications.length} productos) con los ${VADEMECUM_RAW_CATALOG.length} medicamentos del vademécum?`)) {
+                        handleImportVademecum('REPLACE');
+                      }
+                    }}
+                    disabled={isImportingVademecum}
+                    className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-black rounded-xl transition-all cursor-pointer"
+                    title="Borra el inventario actual y carga este catálogo limpio"
+                  >
+                    Reemplazar Inventario
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleImportVademecum('APPEND')}
+                    disabled={isImportingVademecum}
+                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-black rounded-xl shadow-lg shadow-purple-600/30 transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Incorporar al Inventario Actual (+{VADEMECUM_RAW_CATALOG.length} Meds)</span>
                   </button>
                 </div>
               </div>

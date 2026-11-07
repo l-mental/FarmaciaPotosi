@@ -104,14 +104,14 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   const [activeAlertTab, setActiveAlertTab] = useState<'ALL' | 'STOCK' | 'EXPIRED' | 'SHORT'>('ALL');
 
   return (
-    <header className="h-16 md:h-20 bg-white border-b border-slate-100 flex items-center justify-between px-4 md:px-8 lg:px-10 shrink-0 z-20 relative">
-      <div className="flex items-center gap-3">
-        <div className="w-1.5 h-5 md:h-6 bg-emerald-500 rounded-full" />
+    <header className="h-13 md:h-14 bg-white border-b border-slate-100 flex items-center justify-between px-3 md:px-5 lg:px-6 shrink-0 z-20 relative">
+      <div className="flex items-center gap-2.5">
+        <div className="w-1.5 h-4 md:h-5 bg-emerald-500 rounded-full" />
         <div className="flex flex-col">
-          <span className="text-[10px] font-black text-emerald-600 uppercase tracking-wider leading-none mb-1">
+          <span className="text-[9px] font-black text-emerald-600 uppercase tracking-wider leading-none mb-0.5">
             Farma <span className="text-slate-400 font-medium">| SoftPlus</span>
           </span>
-          <h2 className="text-sm md:text-base font-bold text-slate-800 tracking-tight">{displayTab}</h2>
+          <h2 className="text-xs md:text-sm font-bold text-slate-800 tracking-tight">{displayTab}</h2>
         </div>
       </div>
 
